@@ -36,25 +36,24 @@ async function injectIntoTab(tabId) {
   }
 }
 
-// Inject into all open YouTube watch tabs when extension installs or updates
+// Inject into all open YouTube tabs when extension installs or updates
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.tabs.query({ url: 'https://www.youtube.com/watch*' }, (tabs) => {
+  chrome.tabs.query({ url: 'https://www.youtube.com/*' }, (tabs) => {
     for (const tab of tabs) injectIntoTab(tab.id)
   })
 })
 
-// Inject when a tab fully loads a YouTube watch page
+// Inject when a tab fully loads a YouTube page
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return
-  if (!tab.url?.startsWith('https://www.youtube.com/watch')) return
+  if (!tab.url?.startsWith('https://www.youtube.com/')) return
   injectIntoTab(tabId)
 })
 
-// Re-inject on YouTube SPA navigation (clicking between videos)
+// Re-inject on YouTube SPA navigation
 chrome.webNavigation.onHistoryStateUpdated.addListener(
   (details) => {
-    if (!details.url?.startsWith('https://www.youtube.com/watch')) return
-    // Delay slightly to let the new page context settle
+    if (!details.url?.startsWith('https://www.youtube.com/')) return
     setTimeout(() => injectIntoTab(details.tabId), 1500)
   },
   { url: [{ hostContains: 'youtube.com' }] },
@@ -136,7 +135,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 })
 
 async function getActiveYouTubeTabId() {
-  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/watch*' })
+  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
   if (tabs.length > 0) return tabs[0].id
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   return tab?.id ?? null

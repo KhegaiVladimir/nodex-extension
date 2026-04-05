@@ -9,5 +9,6 @@ export const COMMANDS = Object.freeze({
   REWIND:   'REWIND',
   MUTE:     'MUTE',
   SKIP:     'SKIP',
+  BACK:     'BACK',
   NONE:     'NONE',
 })

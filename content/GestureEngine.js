@@ -5,6 +5,8 @@ import {
   DEFAULT_COOLDOWNS,
   DEFAULT_THRESHOLDS,
   EYE_CLOSE_MIN_MS,
+  EYE_CLOSE_MAX_MS,
+  LONG_BLINK_MAX_MS,
 } from '../shared/constants/defaults.js'
 import { Cooldown } from '../shared/utils/cooldown.js'
 import {
@@ -28,7 +30,6 @@ export class GestureEngine {
 
     this._active          = GESTURES.NONE
     this._eyeCloseStart   = null
-    this._eyeCloseFired   = false
     this._destroyed       = false
 
     this._cooldowns = {}
@@ -63,24 +64,22 @@ export class GestureEngine {
     const metrics = { yaw, pitch, roll, ear, mouth }
     this._onMetrics?.(metrics)
 
-    // --- Eye-close timing (blink filter) ---
+    // --- Eye-close timing: fire on eyes OPEN based on closed duration ---
     const earThreshold = (bl?.ear > 0) ? bl.ear * 0.65 : T.earClose
     const eyesClosed = ear < earThreshold
     if (eyesClosed) {
-      if (this._eyeCloseStart === null) {
-        this._eyeCloseStart = Date.now()
-        this._eyeCloseFired = false
-      } else if (!this._eyeCloseFired) {
-        if (Date.now() - this._eyeCloseStart >= EYE_CLOSE_MIN_MS) {
-          this._eyeCloseFired = true
-          this._fire(GESTURES.EYES_CLOSED, metrics)
+      if (this._eyeCloseStart === null) this._eyeCloseStart = Date.now()
+    } else if (this._eyeCloseStart !== null) {
+      const duration = Date.now() - this._eyeCloseStart
+      this._eyeCloseStart = null
+      const cd = this._cooldowns[GESTURES.EYES_CLOSED]
+      if (cd && cd.fire()) {
+        if (duration >= EYE_CLOSE_MAX_MS && duration <= LONG_BLINK_MAX_MS) {
+          this._onCommand?.(COMMANDS.BACK, GESTURES.EYES_CLOSED, metrics)
+        } else if (duration >= EYE_CLOSE_MIN_MS && duration < EYE_CLOSE_MAX_MS) {
+          const cmd = this._gestureMap[GESTURES.EYES_CLOSED] ?? COMMANDS.NONE
+          if (cmd !== COMMANDS.NONE) this._onCommand?.(cmd, GESTURES.EYES_CLOSED, metrics)
         }
-      }
-    } else {
-      if (this._eyeCloseStart !== null) {
-        this._eyeCloseStart = null
-        this._eyeCloseFired = false
-        if (this._active === GESTURES.EYES_CLOSED) this._active = GESTURES.NONE
       }
     }
 
@@ -123,7 +122,6 @@ export class GestureEngine {
     this._destroyed = true
     this._active = GESTURES.NONE
     this._eyeCloseStart = null
-    this._eyeCloseFired = false
     this._onCommand = null
     this._onMetrics = null
     for (const cd of Object.values(this._cooldowns)) cd.reset()

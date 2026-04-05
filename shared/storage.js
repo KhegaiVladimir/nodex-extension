@@ -38,7 +38,7 @@ export async function saveSettings(patch) {
 
 export async function loadGestureMap(defaults = {}) {
   const stored = await get(KEYS.GESTURE_MAP)
-  return stored ?? defaults
+  return { ...defaults, ...(stored ?? {}) }
 }
 
 export async function saveGestureMap(map) {

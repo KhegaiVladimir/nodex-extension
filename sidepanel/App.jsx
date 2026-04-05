@@ -18,7 +18,7 @@ import {
 /* ── helpers ── */
 
 async function getActiveTabId() {
-  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/watch*' })
+  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
   if (tabs.length > 0) return tabs[0].id
 
   const [tab] = await chrome.tabs.query({ active: true })
@@ -57,6 +57,7 @@ const COMMAND_LABELS = {
   [COMMANDS.SKIP]:       '⏩ Вперёд',
   [COMMANDS.NEXT]:       '⏭ Следующее',
   [COMMANDS.PREV]:       '⏮ Предыдущее',
+  [COMMANDS.BACK]:       '↩ Назад',
   [COMMANDS.NONE]:       '— Нет',
 }
 
@@ -64,10 +65,10 @@ const CALIBRATION_DURATION_MS = 3000
 const CALIBRATION_FPS = 15
 
 const TUTORIAL_GESTURES = [
-  { label: 'Поверните голову влево',       command: COMMANDS.REWIND },
-  { label: 'Поверните голову вправо',      command: COMMANDS.SKIP },
-  { label: 'Поднимите голову вверх',       command: COMMANDS.VOL_UP },
-  { label: 'Закройте глаза на 1 секунду', command: COMMANDS.PAUSE },
+  { label: 'Поверните голову влево',       gesture: GESTURES.HEAD_LEFT },
+  { label: 'Поверните голову вправо',      gesture: GESTURES.HEAD_RIGHT },
+  { label: 'Поднимите голову вверх',       gesture: GESTURES.HEAD_UP },
+  { label: 'Закройте глаза на 0.5 сек',   gesture: GESTURES.EYES_CLOSED },
 ]
 
 /* ── styles ── */
@@ -376,6 +377,7 @@ export default function App() {
   const [onboarded, setOnboarded] = useState(null)
   const [screen, setScreen] = useState('main')
   const [running, setRunning] = useState(false)
+  const [browseMode, setBrowseMode] = useState(false)
   const [metrics, setMetrics] = useState(null)
   const [lastCommand, setLastCommand] = useState(null)
 
@@ -390,12 +392,17 @@ export default function App() {
       switch (message.type) {
         case MSG.ENGINE_STATUS:
           setRunning(message.running)
+          if (!message.running) setBrowseMode(false)
           break
         case MSG.METRICS_UPDATE:
           setMetrics(message.metrics)
           break
         case MSG.COMMAND_EXECUTED:
           setLastCommand({ command: message.command, gesture: message.gesture })
+          if (message.browseMode !== undefined) setBrowseMode(message.browseMode)
+          break
+        case MSG.BROWSE_MODE_CHANGED:
+          setBrowseMode(message.browseMode)
           break
       }
     }
@@ -436,6 +443,7 @@ export default function App() {
       {screen === 'main' && (
         <MainScreen
           running={running}
+          browseMode={browseMode}
           metrics={metrics}
           lastCommand={lastCommand}
         />
@@ -649,11 +657,11 @@ function OnboardStep4({ onComplete }) {
   useEffect(() => {
     const listener = (message) => {
       if (message.type !== MSG.COMMAND_EXECUTED) return
-      const cmd = message.command
+      const g = message.gesture
       setCompleted((prev) => {
-        if (TUTORIAL_GESTURES.some((g) => g.command === cmd) && !prev.has(cmd)) {
+        if (TUTORIAL_GESTURES.some((t) => t.gesture === g) && !prev.has(g)) {
           const next = new Set(prev)
-          next.add(cmd)
+          next.add(g)
           return next
         }
         return prev
@@ -676,17 +684,17 @@ function OnboardStep4({ onComplete }) {
           Выполните каждый жест — Nodex покажет, что распознал.
         </p>
 
-        {TUTORIAL_GESTURES.map(({ label, command }) => (
-          <div key={command} style={S.onboardGestureRow}>
+        {TUTORIAL_GESTURES.map(({ label, gesture }) => (
+          <div key={gesture} style={S.onboardGestureRow}>
             <span style={{ fontSize: '12px' }}>{label}</span>
             <span
               style={
-                completed.has(command)
+                completed.has(gesture)
                   ? S.onboardCheck
                   : { color: 'var(--muted)', fontSize: '16px' }
               }
             >
-              {completed.has(command) ? '✓' : '○'}
+              {completed.has(gesture) ? '✓' : '○'}
             </span>
           </div>
         ))}
@@ -717,9 +725,13 @@ function OnboardStep4({ onComplete }) {
 
 /* ── Main Screen ── */
 
-function MainScreen({ running, metrics, lastCommand }) {
+function MainScreen({ running, browseMode, metrics, lastCommand }) {
   const handleToggle = () => {
     sendToContent({ type: running ? MSG.STOP_ENGINE : MSG.START_ENGINE })
+  }
+
+  const handleBrowseToggle = () => {
+    sendToContent({ type: MSG.TOGGLE_BROWSE_MODE })
   }
 
   return (
@@ -738,6 +750,21 @@ function MainScreen({ running, metrics, lastCommand }) {
         >
           {running ? 'Остановить' : 'Запустить'}
         </button>
+
+        {running && (
+          <button
+            style={{
+              ...S.btn,
+              marginTop: '8px',
+              background: browseMode ? 'var(--accent)' : 'var(--surface)',
+              color: browseMode ? '#0a0a0a' : 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
+            onClick={handleBrowseToggle}
+          >
+            {browseMode ? '▶️ Плеер' : '🔍 Навигация'}
+          </button>
+        )}
       </div>
 
       {lastCommand && (

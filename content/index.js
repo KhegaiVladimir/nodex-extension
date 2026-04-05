@@ -15,6 +15,7 @@ import {
 import { HUD } from './HUD.js'
 import { GestureEngine } from './GestureEngine.js'
 import { YouTubeController } from './YouTubeController.js'
+import { BrowseController } from './BrowseController.js'
 
 // Guard against re-injection (e.g. after extension update or SPA navigation).
 // Must come AFTER imports — ES module imports are hoisted and cannot be inside blocks.
@@ -33,12 +34,15 @@ const FRAME_BUDGET_MS      = 38
 
 class NodexContentScript {
   constructor() {
-    this._hud            = null
-    this._gestureEngine  = null
-    this._ytController   = new YouTubeController()
-    this._running        = false
-    this._frameCount     = 0
-    this._destroyed      = false
+    this._hud              = null
+    this._gestureEngine    = null
+    this._ytController     = new YouTubeController()
+    this._browseController = new BrowseController()
+    this._browseMode       = false
+    this._manualModeOverride = false
+    this._running          = false
+    this._frameCount       = 0
+    this._destroyed        = false
 
     this._onMessage       = this._handleMessage.bind(this)
     this._onWindowMessage = this._handleWindowMessage.bind(this)
@@ -48,6 +52,8 @@ class NodexContentScript {
     this._restartAttempts     = 0
     this._contextValid        = true
     this._lastFrameProcessedAt = 0
+    this._lastUrl             = location.href
+    this._navPollTimer        = null
   }
 
   async init() {
@@ -76,6 +82,8 @@ class NodexContentScript {
     window.addEventListener('message', this._onWindowMessage)
     chrome.runtime.onMessage.addListener(this._onMessage)
 
+    this._observeNavigation()
+
     if (settings.engine_active) {
       await this.start()
     }
@@ -94,6 +102,7 @@ class NodexContentScript {
 
     this._hud.show()
     this._startWatchdog()
+    this._autoSetMode()
     await saveSettings({ engine_active: true }).catch(() => {})
     this._sendStatus()
   }
@@ -103,17 +112,30 @@ class NodexContentScript {
     this._stopWatchdog()
     this._running = false
 
+    if (this._browseMode) {
+      this._browseMode = false
+      this._browseController.deactivate()
+    }
+
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
 
     this._hud?.hide()
+    this._hud?.setModeIndicator(false)
     await saveSettings({ engine_active: false }).catch(() => {})
     this._sendStatus()
+    this._sendToSidePanel({ type: MSG.BROWSE_MODE_CHANGED, browseMode: false })
   }
 
   async destroy() {
     if (this._destroyed) return
     this._stopWatchdog()
     this._destroyed = true
+
+    if (this._browseMode) {
+      this._browseMode = false
+      this._browseController.deactivate()
+    }
+    clearInterval(this._navPollTimer)
 
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
     window.removeEventListener('message', this._onWindowMessage)
@@ -209,7 +231,10 @@ class NodexContentScript {
   }
 
   _handleCommand(cmd, gesture, metrics) {
-    const applied = this._ytController.execute(cmd)
+    if (document.visibilityState === 'hidden') return
+
+    const controller = this._browseMode ? this._browseController : this._ytController
+    const applied = controller.execute(cmd)
     this._hud?.showCommand(cmd)
 
     this._sendToSidePanel({
@@ -218,6 +243,7 @@ class NodexContentScript {
       gesture,
       applied,
       metrics,
+      browseMode: this._browseMode,
     })
   }
 
@@ -262,11 +288,71 @@ class NodexContentScript {
         this._sendStatus()
         break
 
+      case MSG.TOGGLE_BROWSE_MODE:
+        this._toggleBrowseMode(true)
+        this._hud?.showCommand(this._browseMode ? 'BROWSE_ON' : 'BROWSE_OFF')
+        break
+
       default:
         break
     }
 
     sendResponse?.({ ok: true })
+  }
+
+  _toggleBrowseMode(manual = false) {
+    if (manual) this._manualModeOverride = true
+    this._browseMode = !this._browseMode
+    if (this._browseMode) {
+      const count = this._browseController.activate()
+      if (count === 0) this._hud?.showCommand('NO_VIDEOS')
+    } else {
+      this._browseController.deactivate()
+    }
+    this._hud?.setModeIndicator(this._browseMode)
+    this._sendToSidePanel({
+      type: MSG.BROWSE_MODE_CHANGED,
+      browseMode: this._browseMode,
+    })
+  }
+
+  _observeNavigation() {
+    const onNavigate = () => {
+      if (this._lastUrl === location.href) return
+      this._lastUrl = location.href
+      if (!this._running) return
+      if (this._manualModeOverride) {
+        this._manualModeOverride = false
+        return
+      }
+      this._autoSetMode()
+    }
+
+    try {
+      if (typeof navigation !== 'undefined') {
+        navigation.addEventListener('navigatesuccess', onNavigate)
+      }
+    } catch (_e) { /* navigation API unavailable */ }
+
+    this._navPollTimer = setInterval(onNavigate, 1000)
+  }
+
+  _autoSetMode() {
+    const url = location.href
+    const shouldBrowse = !url.includes('/watch') && !url.includes('/shorts/')
+    if (shouldBrowse === this._browseMode) return
+    this._browseMode = shouldBrowse
+    if (shouldBrowse) {
+      const count = this._browseController.activate()
+      if (count === 0) this._hud?.showCommand('NO_VIDEOS')
+    } else {
+      this._browseController.deactivate()
+    }
+    this._hud?.setModeIndicator(this._browseMode)
+    this._sendToSidePanel({
+      type: MSG.BROWSE_MODE_CHANGED,
+      browseMode: this._browseMode,
+    })
   }
 
   _startWatchdog() {

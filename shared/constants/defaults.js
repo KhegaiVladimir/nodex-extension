@@ -8,48 +8,49 @@ export const DEFAULT_GESTURE_MAP = {
   [GESTURES.HEAD_DOWN]:   COMMANDS.VOL_DOWN,
   [GESTURES.TILT_LEFT]:   COMMANDS.PREV,
   [GESTURES.TILT_RIGHT]:  COMMANDS.NEXT,
-  [GESTURES.EYES_CLOSED]: COMMANDS.PAUSE,
-  [GESTURES.MOUTH_OPEN]:  COMMANDS.MUTE,
+  [GESTURES.EYES_CLOSED]: COMMANDS.PLAY_PAUSE,
 }
 
 export const DEFAULT_COOLDOWNS = {
-  [GESTURES.HEAD_UP]:     300,
-  [GESTURES.HEAD_DOWN]:   300,
+  [GESTURES.HEAD_UP]:     200,
+  [GESTURES.HEAD_DOWN]:   200,
   [GESTURES.HEAD_LEFT]:   600,
   [GESTURES.HEAD_RIGHT]:  600,
   [GESTURES.TILT_LEFT]:   800,
   [GESTURES.TILT_RIGHT]:  800,
-  [GESTURES.EYES_CLOSED]: 1200,
+  [GESTURES.EYES_CLOSED]: 1000,
   [GESTURES.MOUTH_OPEN]:  600,
 }
 
 export const DEFAULT_THRESHOLDS = {
-  yaw: 18,
+  yaw: 15,
   pitch: 12,
   roll: 15,
   earClose: 0.18,
   mouthOpen: 0.55,
-  hysteresis: 4,
+  hysteresis: 5,
 }
 
-export const EYE_CLOSE_MIN_MS = 350
+export const EYE_CLOSE_MIN_MS   = 350
+export const EYE_CLOSE_MAX_MS   = 700
+export const LONG_BLINK_MAX_MS  = 1500
 
 export const SENSITIVITY_PRESETS = {
   low: {
-    yaw: 22,
+    yaw: 19,
     pitch: 15,
     roll: 18,
     earClose: 0.16,
     mouthOpen: 0.62,
-    hysteresis: 5,
+    hysteresis: 6,
   },
   medium: DEFAULT_THRESHOLDS,
   high: {
-    yaw: 14,
+    yaw: 12,
     pitch: 9,
     roll: 12,
     earClose: 0.20,
     mouthOpen: 0.48,
-    hysteresis: 3,
+    hysteresis: 4,
   },
 }

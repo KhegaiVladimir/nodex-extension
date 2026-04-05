@@ -13,6 +13,10 @@ const COMMAND_LABELS = Object.freeze({
   [COMMANDS.SKIP]:       '⏩ Вперёд',
   [COMMANDS.NEXT]:       '⏭ Следующее',
   [COMMANDS.PREV]:       '⏮ Предыдущее',
+  [COMMANDS.BACK]:       '↩ Назад',
+  BROWSE_ON:             '🔍 Навигация',
+  BROWSE_OFF:            '▶️ Плеер',
+  NO_VIDEOS:             '⚠ Нет видео на странице',
 })
 
 const HUD_STYLES = /* css */ `
@@ -102,6 +106,17 @@ const HUD_STYLES = /* css */ `
     font-size: 13px;
   }
 
+  .nodex-mode-badge {
+    background: rgba(10, 10, 10, 0.85);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    backdrop-filter: blur(6px);
+    align-self: flex-end;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
   .hidden {
     display: none !important;
   }
@@ -109,14 +124,15 @@ const HUD_STYLES = /* css */ `
 
 export class HUD {
   constructor() {
-    this._host      = null
-    this._shadow    = null
-    this._videoEl   = null
-    this._container = null
-    this._metrics   = null
-    this._toast     = null
+    this._host       = null
+    this._shadow     = null
+    this._videoEl    = null
+    this._container  = null
+    this._metrics    = null
+    this._toast      = null
     this._toastTimer = null
-    this._stream    = null
+    this._stream     = null
+    this._modeBadge  = null
   }
 
   /**
@@ -147,6 +163,11 @@ export class HUD {
     this._toast = document.createElement('div')
     this._toast.className = 'nodex-toast'
 
+    this._modeBadge = document.createElement('div')
+    this._modeBadge.className = 'nodex-mode-badge'
+    this._modeBadge.textContent = '▶️ Плеер'
+
+    this._container.appendChild(this._modeBadge)
     this._container.appendChild(this._videoEl)
     this._container.appendChild(this._metrics)
     this._shadow.appendChild(this._container)
@@ -184,6 +205,13 @@ export class HUD {
     this._toastTimer = setTimeout(() => {
       this._toast.classList.remove('visible')
     }, TOAST_DURATION_MS)
+  }
+
+  setModeIndicator(browseMode) {
+    if (!this._modeBadge) return
+    this._modeBadge.textContent = browseMode ? '🔍 Навигация' : '▶️ Плеер'
+    this._modeBadge.style.background = browseMode ? '#00e5ff' : ''
+    this._modeBadge.style.color = browseMode ? '#0a0a0a' : ''
   }
 
   showWarning(message) {
@@ -234,6 +262,7 @@ export class HUD {
     this._container = null
     this._metrics   = null
     this._toast     = null
+    this._modeBadge = null
   }
 
   // --- internals ---
