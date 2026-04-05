@@ -28,8 +28,6 @@ async function getActiveTabId() {
 async function sendToContent(payload) {
   const tabId = await getActiveTabId()
   if (tabId == null) return
-  // Must NOT spread payload: inner `type` (START_ENGINE, etc.) would overwrite
-  // SIDEPANEL_TO_CONTENT and the SW would never forward to the tab.
   chrome.runtime.sendMessage({
     type: MSG.SIDEPANEL_TO_CONTENT,
     tabId,
@@ -64,6 +62,13 @@ const COMMAND_LABELS = {
 
 const CALIBRATION_DURATION_MS = 3000
 const CALIBRATION_FPS = 15
+
+const TUTORIAL_GESTURES = [
+  { label: 'Поверните голову влево',       command: COMMANDS.REWIND },
+  { label: 'Поверните голову вправо',      command: COMMANDS.SKIP },
+  { label: 'Поднимите голову вверх',       command: COMMANDS.VOL_UP },
+  { label: 'Закройте глаза на 1 секунду', command: COMMANDS.PAUSE },
+]
 
 /* ── styles ── */
 
@@ -185,15 +190,199 @@ const S = {
   },
   gestureLabel: { fontSize: '12px', flex: '1 1 auto', whiteSpace: 'nowrap' },
   gestureSelect: { flex: '0 0 130px' },
+
+  onboardWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '24px',
+    gap: '20px',
+    minHeight: '100vh',
+    justifyContent: 'center',
+  },
+  onboardCard: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    padding: '24px',
+  },
+  onboardTitle: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: '28px',
+    fontWeight: 800,
+    color: 'var(--accent)',
+    margin: '0 0 4px',
+  },
+  onboardHeading: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: '16px',
+    fontWeight: 600,
+    color: 'var(--text)',
+    margin: '0 0 8px',
+  },
+  onboardSub: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '14px',
+    color: 'var(--text)',
+    margin: '0 0 12px',
+  },
+  onboardText: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+    color: 'var(--muted)',
+    lineHeight: 1.6,
+    margin: '0 0 16px',
+  },
+  onboardNote: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '11px',
+    color: 'var(--muted)',
+    fontStyle: 'italic',
+    lineHeight: 1.5,
+    margin: '0 0 16px',
+  },
+  onboardBtn: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '14px',
+    fontWeight: 600,
+    background: 'var(--accent)',
+    color: '#0a0a0a',
+    height: '48px',
+    borderRadius: '12px',
+    border: 'none',
+    width: '100%',
+    cursor: 'pointer',
+    transition: 'opacity 0.15s',
+  },
+  onboardStatus: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginTop: '12px',
+  },
+  onboardGestureRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 0',
+    borderBottom: '1px solid var(--border)',
+  },
+  onboardCheck: {
+    color: 'var(--accent)',
+    fontWeight: 700,
+    fontSize: '16px',
+  },
+  onboardSkip: {
+    fontFamily: 'var(--font-mono)',
+    color: 'var(--muted)',
+    fontSize: '11px',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+    marginTop: '16px',
+    background: 'none',
+    border: 'none',
+  },
+  onboardDot: {
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: 'var(--accent)',
+  },
+}
+
+/* ── useCalibration hook ── */
+
+function useCalibration() {
+  const [phase, setPhase] = useState('idle')
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState(null)
+  const framesRef = useRef([])
+  const doneRef = useRef(false)
+
+  const startCalibration = useCallback(() => {
+    setPhase('capturing')
+    setProgress(0)
+    setError(null)
+    framesRef.current = []
+    doneRef.current = false
+
+    const started = Date.now()
+
+    const finalize = async () => {
+      if (doneRef.current) return
+      doneRef.current = true
+
+      const frames = framesRef.current
+      if (frames.length === 0) {
+        setError('Нет кадров для калибровки.')
+        setPhase('idle')
+        return
+      }
+
+      const baseline = {
+        yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
+        pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
+        roll:  frames.reduce((s, f) => s + (f.roll ?? 0), 0) / frames.length,
+      }
+
+      try {
+        await saveCalibration(baseline)
+        await sendToContent({ type: MSG.SAVE_CALIBRATION, baseline })
+        setPhase('done')
+      } catch (err) {
+        setError(`Ошибка сохранения: ${err.message}`)
+        setPhase('idle')
+      }
+    }
+
+    const listener = (message) => {
+      if (message.type !== MSG.METRICS_UPDATE || !message.metrics) return
+
+      framesRef.current.push(message.metrics)
+      const elapsed = Date.now() - started
+      setProgress(Math.min(100, (elapsed / CALIBRATION_DURATION_MS) * 100))
+
+      if (elapsed >= CALIBRATION_DURATION_MS) {
+        chrome.runtime.onMessage.removeListener(listener)
+        finalize()
+      }
+    }
+
+    chrome.runtime.onMessage.addListener(listener)
+
+    setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(listener)
+      if (framesRef.current.length > 0) finalize()
+      else if (!doneRef.current) {
+        setPhase('idle')
+        setError('Не получены метрики. Убедитесь, что движок запущен.')
+      }
+    }, CALIBRATION_DURATION_MS + 1000)
+  }, [])
+
+  const reset = useCallback(() => {
+    setPhase('idle')
+    setProgress(0)
+    setError(null)
+  }, [])
+
+  return { phase, progress, error, startCalibration, reset }
 }
 
 /* ── App ── */
 
 export default function App() {
+  const [onboarded, setOnboarded] = useState(null)
   const [screen, setScreen] = useState('main')
   const [running, setRunning] = useState(false)
   const [metrics, setMetrics] = useState(null)
   const [lastCommand, setLastCommand] = useState(null)
+
+  useEffect(() => {
+    loadSettings({}).then((settings) => {
+      setOnboarded(settings.onboarding_complete === true)
+    })
+  }, [])
 
   useEffect(() => {
     const listener = (message) => {
@@ -215,6 +404,14 @@ export default function App() {
 
     return () => chrome.runtime.onMessage.removeListener(listener)
   }, [])
+
+  if (onboarded === null) {
+    return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
+  }
+
+  if (!onboarded) {
+    return <OnboardingFlow onComplete={() => setOnboarded(true)} />
+  }
 
   return (
     <div style={S.app}>
@@ -244,6 +441,275 @@ export default function App() {
       )}
       {screen === 'calibration' && <CalibrationScreen />}
       {screen === 'settings' && <SettingsScreen />}
+    </div>
+  )
+}
+
+/* ── Onboarding Flow ── */
+
+function OnboardingFlow({ onComplete }) {
+  const [step, setStep] = useState(1)
+  const next = useCallback(() => setStep((s) => s + 1), [])
+
+  if (step === 1) return <OnboardStep1 onNext={next} />
+  if (step === 2) return <OnboardStep2 onNext={next} />
+  if (step === 3) return <OnboardStep3 onNext={next} />
+  if (step === 4) return <OnboardStep4 onComplete={onComplete} />
+  return null
+}
+
+/* ── Step 1: Welcome ── */
+
+function OnboardStep1({ onNext }) {
+  return (
+    <div style={S.onboardWrap}>
+      <div style={S.onboardCard}>
+        <h1 style={S.onboardTitle}>Nodex</h1>
+        <p style={S.onboardSub}>Управляй YouTube без рук</p>
+        <p style={S.onboardText}>
+          Nodex использует камеру для отслеживания движений головы и лица.
+          Поворот головы, наклон, закрытие глаз — всё превращается в команды
+          плеера.
+        </p>
+        <button style={S.onboardBtn} onClick={onNext}>
+          Начать настройку →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Step 2: Camera Permission ── */
+
+function OnboardStep2({ onNext }) {
+  const [status, setStatus] = useState('idle')
+
+  const handleStart = useCallback(() => {
+    if (status === 'waiting' || status === 'success') return
+    setStatus('waiting')
+    sendToContent({ type: MSG.START_ENGINE })
+
+    const timeout = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(listener)
+      setStatus((cur) => (cur === 'waiting' ? 'error' : cur))
+    }, 10000)
+
+    const listener = (message) => {
+      if (message.type === MSG.ENGINE_STATUS && message.running) {
+        clearTimeout(timeout)
+        chrome.runtime.onMessage.removeListener(listener)
+        setStatus('success')
+        setTimeout(onNext, 1500)
+      }
+    }
+    chrome.runtime.onMessage.addListener(listener)
+  }, [status, onNext])
+
+  return (
+    <div style={S.onboardWrap}>
+      <div style={S.onboardCard}>
+        <h2 style={S.onboardHeading}>Камера</h2>
+        <p style={S.onboardText}>
+          Откройте любое видео на YouTube и нажмите кнопку ниже.
+        </p>
+        <p style={S.onboardNote}>
+          Nodex запросит доступ к камере — это нужно для отслеживания жестов.
+          Видео с камеры не записывается и не передаётся.
+        </p>
+        <button
+          style={{ ...S.onboardBtn, opacity: status === 'waiting' ? 0.6 : 1 }}
+          onClick={handleStart}
+          disabled={status === 'waiting' || status === 'success'}
+        >
+          Запустить движок
+        </button>
+
+        {status === 'waiting' && (
+          <div style={S.onboardStatus}>
+            <span style={S.onboardDot} />
+            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Запуск...</span>
+          </div>
+        )}
+        {status === 'success' && (
+          <div style={S.onboardStatus}>
+            <span style={{ ...S.onboardDot, background: '#4ade80' }} />
+            <span style={{ color: '#4ade80', fontSize: '12px' }}>Движок работает</span>
+          </div>
+        )}
+        {status === 'error' && (
+          <div style={S.onboardStatus}>
+            <span style={{ color: '#ef4444', fontSize: '12px' }}>
+              Ошибка: откройте видео на YouTube и попробуйте снова
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Step 3: Calibration ── */
+
+function OnboardStep3({ onNext }) {
+  const { phase, progress, error, startCalibration } = useCalibration()
+  const [liveMetrics, setLiveMetrics] = useState(null)
+
+  useEffect(() => {
+    const listener = (message) => {
+      if (message.type === MSG.METRICS_UPDATE && message.metrics) {
+        setLiveMetrics(message.metrics)
+      }
+    }
+    chrome.runtime.onMessage.addListener(listener)
+    return () => chrome.runtime.onMessage.removeListener(listener)
+  }, [])
+
+  useEffect(() => {
+    if (phase === 'done') {
+      const timer = setTimeout(onNext, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [phase, onNext])
+
+  return (
+    <div style={S.onboardWrap}>
+      <div style={S.onboardCard}>
+        <h2 style={S.onboardHeading}>Калибровка</h2>
+        <p style={S.onboardText}>
+          Смотрите прямо в камеру. Держите голову неподвижно.
+        </p>
+
+        {liveMetrics && (
+          <div style={{ display: 'flex', gap: '16px', margin: '0 0 12px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+              Yaw:{' '}
+              <span style={{ color: 'var(--accent)' }}>
+                {liveMetrics.yaw?.toFixed(1) ?? '—'}
+              </span>
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+              Pitch:{' '}
+              <span style={{ color: 'var(--accent)' }}>
+                {liveMetrics.pitch?.toFixed(1) ?? '—'}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {phase === 'idle' && (
+          <>
+            {error && (
+              <p style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>
+                {error}
+              </p>
+            )}
+            <button style={S.onboardBtn} onClick={startCalibration}>
+              Начать калибровку (3 сек)
+            </button>
+          </>
+        )}
+
+        {phase === 'capturing' && (
+          <>
+            <p style={{ color: 'var(--accent)', fontSize: '12px' }}>
+              Захват... Не двигайте головой.
+            </p>
+            <div style={S.progressBar}>
+              <div style={S.progressFill(progress)} />
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: '11px', marginTop: '6px', textAlign: 'right' }}>
+              {Math.round(progress)}%
+            </p>
+          </>
+        )}
+
+        {phase === 'done' && (
+          <p style={{ color: '#4ade80', fontSize: '13px' }}>
+            Калибровка сохранена!
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── Step 4: Gesture Tutorial ── */
+
+function OnboardStep4({ onComplete }) {
+  const [completed, setCompleted] = useState(() => new Set())
+  const [showSkip, setShowSkip] = useState(false)
+  const allDone = completed.size === TUTORIAL_GESTURES.length
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSkip(true), 60000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    const listener = (message) => {
+      if (message.type !== MSG.COMMAND_EXECUTED) return
+      const cmd = message.command
+      setCompleted((prev) => {
+        if (TUTORIAL_GESTURES.some((g) => g.command === cmd) && !prev.has(cmd)) {
+          const next = new Set(prev)
+          next.add(cmd)
+          return next
+        }
+        return prev
+      })
+    }
+    chrome.runtime.onMessage.addListener(listener)
+    return () => chrome.runtime.onMessage.removeListener(listener)
+  }, [])
+
+  const handleFinish = useCallback(async () => {
+    await saveSettings({ onboarding_complete: true })
+    onComplete()
+  }, [onComplete])
+
+  return (
+    <div style={S.onboardWrap}>
+      <div style={S.onboardCard}>
+        <h2 style={S.onboardHeading}>Попробуйте жесты</h2>
+        <p style={S.onboardText}>
+          Выполните каждый жест — Nodex покажет, что распознал.
+        </p>
+
+        {TUTORIAL_GESTURES.map(({ label, command }) => (
+          <div key={command} style={S.onboardGestureRow}>
+            <span style={{ fontSize: '12px' }}>{label}</span>
+            <span
+              style={
+                completed.has(command)
+                  ? S.onboardCheck
+                  : { color: 'var(--muted)', fontSize: '16px' }
+              }
+            >
+              {completed.has(command) ? '✓' : '○'}
+            </span>
+          </div>
+        ))}
+
+        {allDone && (
+          <>
+            <p style={{ color: 'var(--accent)', fontSize: '14px', fontWeight: 700, marginTop: '16px' }}>
+              Отлично! Всё работает.
+            </p>
+            <button
+              style={{ ...S.onboardBtn, marginTop: '12px' }}
+              onClick={handleFinish}
+            >
+              Перейти к Nodex →
+            </button>
+          </>
+        )}
+
+        {showSkip && !allDone && (
+          <button style={S.onboardSkip} onClick={handleFinish}>
+            Пропустить →
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -311,68 +777,7 @@ function MainScreen({ running, metrics, lastCommand }) {
 /* ── Calibration Screen ── */
 
 function CalibrationScreen() {
-  const [phase, setPhase] = useState('idle')
-  const [progress, setProgress] = useState(0)
-  const [error, setError] = useState(null)
-  const framesRef = useRef([])
-
-  const handleStart = useCallback(() => {
-    setPhase('capturing')
-    setProgress(0)
-    setError(null)
-    framesRef.current = []
-
-    const started = Date.now()
-    const expectedFrames = Math.round((CALIBRATION_DURATION_MS / 1000) * CALIBRATION_FPS)
-
-    const listener = (message) => {
-      if (message.type !== MSG.METRICS_UPDATE || !message.metrics) return
-
-      framesRef.current.push(message.metrics)
-      const elapsed = Date.now() - started
-      setProgress(Math.min(100, (elapsed / CALIBRATION_DURATION_MS) * 100))
-
-      if (elapsed >= CALIBRATION_DURATION_MS) {
-        chrome.runtime.onMessage.removeListener(listener)
-        finalize()
-      }
-    }
-
-    chrome.runtime.onMessage.addListener(listener)
-
-    setTimeout(() => {
-      chrome.runtime.onMessage.removeListener(listener)
-      if (framesRef.current.length > 0) finalize()
-      else {
-        setPhase('idle')
-        setError('Не получены метрики. Убедитесь, что движок запущен.')
-      }
-    }, CALIBRATION_DURATION_MS + 1000)
-  }, [])
-
-  const finalize = useCallback(async () => {
-    const frames = framesRef.current
-    if (frames.length === 0) {
-      setError('Нет кадров для калибровки.')
-      setPhase('idle')
-      return
-    }
-
-    const baseline = {
-      yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
-      pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
-      roll:  frames.reduce((s, f) => s + (f.roll ?? 0), 0) / frames.length,
-    }
-
-    try {
-      await saveCalibration(baseline)
-      await sendToContent({ type: MSG.SAVE_CALIBRATION, baseline })
-      setPhase('done')
-    } catch (err) {
-      setError(`Ошибка сохранения: ${err.message}`)
-      setPhase('idle')
-    }
-  }, [])
+  const { phase, progress, error, startCalibration, reset } = useCalibration()
 
   return (
     <div style={S.card}>
@@ -389,7 +794,7 @@ function CalibrationScreen() {
           )}
           <button
             style={{ ...S.btn, ...S.btnPrimary }}
-            onClick={handleStart}
+            onClick={startCalibration}
           >
             Начать калибровку
           </button>
@@ -417,7 +822,7 @@ function CalibrationScreen() {
           </p>
           <button
             style={{ ...S.btn, ...S.btnSecondary }}
-            onClick={() => { setPhase('idle'); setProgress(0) }}
+            onClick={reset}
           >
             Повторить
           </button>

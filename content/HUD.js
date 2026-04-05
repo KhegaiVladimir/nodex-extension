@@ -96,6 +96,12 @@ const HUD_STYLES = /* css */ `
     opacity: 1;
   }
 
+  .nodex-toast.warning {
+    border: 1px solid #ef4444;
+    background: rgba(40, 10, 10, 0.92);
+    font-size: 13px;
+  }
+
   .hidden {
     display: none !important;
   }
@@ -169,6 +175,7 @@ export class HUD {
   showCommand(command) {
     if (!this._toast) return
 
+    this._toast.classList.remove('warning')
     const label = COMMAND_LABELS[command] ?? command
     this._toast.textContent = label
     this._toast.classList.add('visible')
@@ -177,6 +184,18 @@ export class HUD {
     this._toastTimer = setTimeout(() => {
       this._toast.classList.remove('visible')
     }, TOAST_DURATION_MS)
+  }
+
+  showWarning(message) {
+    if (!this._toast) return
+
+    this._toast.textContent = message
+    this._toast.classList.add('visible', 'warning')
+
+    clearTimeout(this._toastTimer)
+    this._toastTimer = setTimeout(() => {
+      this._toast.classList.remove('visible', 'warning')
+    }, 5000)
   }
 
   /**

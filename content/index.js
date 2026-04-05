@@ -25,6 +25,11 @@ if (window.__nodexLoaded) {
 window.__nodexLoaded = true
 
 const METRICS_SEND_INTERVAL = 3
+const WATCHDOG_INTERVAL_MS = 3000
+const LANDMARK_TIMEOUT_MS  = 5000
+const MAX_RESTART_ATTEMPTS = 3
+const RESTART_COOLDOWN_MS  = 2000
+const FRAME_BUDGET_MS      = 38
 
 class NodexContentScript {
   constructor() {
@@ -37,6 +42,12 @@ class NodexContentScript {
 
     this._onMessage       = this._handleMessage.bind(this)
     this._onWindowMessage = this._handleWindowMessage.bind(this)
+
+    this._lastLandmarkTime    = 0
+    this._watchdogTimer       = null
+    this._restartAttempts     = 0
+    this._contextValid        = true
+    this._lastFrameProcessedAt = 0
   }
 
   async init() {
@@ -82,12 +93,14 @@ class NodexContentScript {
     }, '*')
 
     this._hud.show()
+    this._startWatchdog()
     await saveSettings({ engine_active: true }).catch(() => {})
     this._sendStatus()
   }
 
   async stop() {
     if (!this._running) return
+    this._stopWatchdog()
     this._running = false
 
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
@@ -99,6 +112,7 @@ class NodexContentScript {
 
   async destroy() {
     if (this._destroyed) return
+    this._stopWatchdog()
     this._destroyed = true
 
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
@@ -117,11 +131,18 @@ class NodexContentScript {
 
     if (e.data?.type === 'NODEX_LANDMARKS') {
       if (!this._running || this._destroyed) return
+      this._lastLandmarkTime = Date.now()
+
+      const now = performance.now()
+      if (now - this._lastFrameProcessedAt < FRAME_BUDGET_MS) return
+      this._lastFrameProcessedAt = now
+
       this._gestureEngine?.processFrame(e.data.data)
     }
 
     if (e.data?.type === 'NODEX_BRIDGE_ERROR') {
       console.error('[Nodex] Bridge error:', e.data.error)
+      this._hud?.showWarning('Ошибка камеры: ' + (e.data.error ?? 'неизвестно'))
     }
 
     /**
@@ -248,11 +269,70 @@ class NodexContentScript {
     sendResponse?.({ ok: true })
   }
 
+  _startWatchdog() {
+    clearInterval(this._watchdogTimer)
+    this._lastLandmarkTime = Date.now()
+    this._restartAttempts = 0
+    this._watchdogTimer = setInterval(() => this._watchdogCheck(), WATCHDOG_INTERVAL_MS)
+  }
+
+  _stopWatchdog() {
+    clearInterval(this._watchdogTimer)
+    this._watchdogTimer = null
+  }
+
+  _watchdogCheck() {
+    if (!this._running || this._destroyed) return
+
+    try { chrome.runtime.getURL('') } catch (_e) {
+      this._handleContextInvalidated()
+      return
+    }
+
+    const elapsed = Date.now() - this._lastLandmarkTime
+    if (elapsed < LANDMARK_TIMEOUT_MS) {
+      this._restartAttempts = 0
+      return
+    }
+
+    this._restartAttempts++
+
+    if (this._restartAttempts > MAX_RESTART_ATTEMPTS) {
+      this._hud?.showWarning('Камера потеряна. Перезагрузите страницу.')
+      this.stop()
+      this._sendToSidePanel({
+        type: MSG.ENGINE_STATUS,
+        running: false,
+        error: 'bridge_dead',
+      })
+      return
+    }
+
+    console.warn(
+      `[Nodex] Watchdog: no landmarks for ${elapsed}ms, restarting bridge ` +
+      `(attempt ${this._restartAttempts}/${MAX_RESTART_ATTEMPTS})`,
+    )
+    this._hud?.showWarning('Переподключение камеры...')
+    window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
+    this._lastLandmarkTime = Date.now()
+    setTimeout(() => {
+      if (!this._running || this._destroyed) return
+      window.postMessage({
+        type: 'NODEX_START_CAMERA',
+        extensionBaseUrl: chrome.runtime.getURL(''),
+      }, '*')
+    }, RESTART_COOLDOWN_MS)
+  }
+
+  _handleContextInvalidated() {
+    this._contextValid = false
+    this._hud?.showWarning('Расширение обновлено. Перезагрузите страницу.')
+    this._stopWatchdog()
+  }
+
   _sendToSidePanel(payload) {
+    if (!this._contextValid) return
     try {
-      // Must NOT spread payload into the same object as `type`: inner `type`
-      // (ENGINE_STATUS, etc.) would overwrite CONTENT_TO_SIDEPANEL and the SW
-      // would never relay to the side panel.
       chrome.runtime.sendMessage({
         type: MSG.CONTENT_TO_SIDEPANEL,
         payload,
