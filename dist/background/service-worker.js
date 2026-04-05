@@ -66,15 +66,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
 
     case MSG_CONTENT_TO_SIDEPANEL:
-      // Relay from content script to side panel
-      chrome.runtime.sendMessage(message).catch(() => {})
+      // Relay from content script to side panel (payload carries ENGINE_STATUS, etc.)
+      if (message.payload) {
+        chrome.runtime.sendMessage(message.payload).catch(() => {})
+      }
       sendResponse({ ok: true })
       break
 
     case MSG_SIDEPANEL_TO_CONTENT:
-      // Relay from side panel to content script
-      if (message.tabId) {
-        const { type: _t, tabId: _id, ...inner } = message; chrome.tabs.sendMessage(message.tabId, inner).catch(() => {})
+      // Relay from side panel to content script (inner carries START_ENGINE, etc.)
+      if (message.tabId != null && message.inner) {
+        chrome.tabs.sendMessage(message.tabId, message.inner).catch(() => {})
       }
       sendResponse({ ok: true })
       break
@@ -87,42 +89,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true })
       break
 
-    case 'INJECT_SCRIPT_URL': {
-      // Bridge requests injection of a specific chrome-extension:// URL via executeScript.
-      // This bypasses YouTube's TrustedTypes — extension scripting ignores page CSP.
-      const tabId = sender.tab?.id
-      if (tabId == null) {
-        sendResponse({ ok: false, error: 'no sender tab id' })
-        break
-      }
-      const scriptUrl = message.url
-      // Only allow chrome-extension:// URLs — never inject arbitrary URLs
-      if (!scriptUrl?.startsWith('chrome-extension://')) {
-        sendResponse({ ok: false, error: 'only chrome-extension:// URLs allowed' })
-        break
-      }
-      // Extract the file path relative to extension root
-      const extOrigin = chrome.runtime.getURL('')
-      const filePath = scriptUrl.startsWith(extOrigin)
-        ? scriptUrl.slice(extOrigin.length)
-        : null
-      if (!filePath) {
-        sendResponse({ ok: false, error: 'URL not from this extension' })
-        break
-      }
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: [filePath],
-        world: 'MAIN',
-      })
-        .then(() => sendResponse({ ok: true }))
-        .catch((err) => sendResponse({ ok: false, error: err.message }))
-      return true
-    }
-
     case MSG_INJECT_MEDIAPIPE: {
-      // Bridge (MAIN world) asks us to inject MediaPipe files.
-      // chrome.scripting bypasses YouTube's Trusted Types — extension privileges override page CSP.
       const tabId = sender.tab?.id
       if (tabId == null) {
         sendResponse({ ok: false, error: 'no sender tab id' })
@@ -138,7 +105,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }))
-      // Return true to signal async sendResponse
+      return true
+    }
+
+    case 'INJECT_SCRIPT': {
+      const tabId = sender.tab?.id
+      if (tabId == null) {
+        sendResponse({ ok: false, error: 'no sender tab id' })
+        break
+      }
+      const filePath = message.path
+      if (!filePath) {
+        sendResponse({ ok: false, error: 'no file path' })
+        break
+      }
+      chrome.scripting.executeScript({
+        target: { tabId },
+        files: [filePath],
+        world: 'MAIN',
+      })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }))
       return true
     }
 

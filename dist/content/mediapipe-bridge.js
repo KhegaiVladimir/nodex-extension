@@ -17,79 +17,6 @@
   let running  = false
   let baseUrl  = ''
 
-  /**
-   * YouTube's TrustedTypes policy blocks everything that sets script content:
-   *   - script.src / setAttribute('src')  → TrustedScriptURL
-   *   - script.textContent                → TrustedScript
-   *   - Function(code) / eval(code)       → TrustedScript
-   *
-   * The ONLY bypass: chrome.scripting.executeScript() from the extension's
-   * service worker. Extension-level script injection bypasses ALL page CSP
-   * and TrustedTypes policies — it runs at browser privilege level.
-   *
-   * Strategy:
-   * 1. Patch document.createElement('script') before face_mesh.js loads
-   * 2. When face_mesh.js calls script.setAttribute('src', url):
-   *    - Intercept it
-   *    - postMessage to ISOLATED world (index.js)
-   *    - index.js forwards to SW via chrome.runtime.sendMessage
-   *    - SW uses chrome.scripting.executeScript with world:'MAIN' to inject the file
-   *    - SW responds with ok:true
-   *    - We fire 'load' event on the script element
-   *
-   * This is the same mechanism already used for face_mesh.js itself — we just
-   * extend it to cover the additional scripts MediaPipe loads during initialize().
-   */
-  const _origCreateElement = document.createElement.bind(document)
-  let _patchActive = false
-
-  document.createElement = function(tagName, ...args) {
-    const el = _origCreateElement(tagName, ...args)
-
-    if (_patchActive && typeof tagName === 'string' && tagName.toLowerCase() === 'script') {
-      const _origSetAttr = el.setAttribute.bind(el)
-
-      el.setAttribute = function(name, value) {
-        if (name === 'src' && value) {
-          // Ask SW to inject this file via executeScript (bypasses TrustedTypes)
-          // Use postMessage → ISOLATED world → SW pipeline
-          const msgType = 'NODEX_INJECT_SCRIPT_URL'
-          const resultType = 'NODEX_INJECT_SCRIPT_URL_RESULT'
-          const requestId = Math.random().toString(36).slice(2)
-
-          const timeoutId = setTimeout(() => {
-            window.removeEventListener('message', handler)
-            console.error('[Nodex Bridge] Timeout injecting script:', value)
-            el.dispatchEvent(new Event('error'))
-          }, 10000)
-
-          function handler(e) {
-            if (e.source !== window) return
-            if (e.data?.type !== resultType) return
-            if (e.data?.requestId !== requestId) return
-            clearTimeout(timeoutId)
-            window.removeEventListener('message', handler)
-            if (e.data.ok) {
-              el.dispatchEvent(new Event('load'))
-            } else {
-              console.error('[Nodex Bridge] SW inject failed:', e.data.error)
-              el.dispatchEvent(new Event('error'))
-            }
-          }
-
-          window.addEventListener('message', handler)
-          window.postMessage({ type: msgType, url: value, requestId }, '*')
-          return
-        }
-        return _origSetAttr(name, value)
-      }
-    }
-
-    return el
-  }
-
-  _patchActive = true
-
   function requestMediaPipeInjection() {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
@@ -127,6 +54,37 @@
     })
   }
 
+  /**
+   * face_mesh.js's patched Vb() dispatches __nodex_load_script with {url, id}.
+   * We relay through the isolated world → service worker → chrome.scripting.executeScript,
+   * which completely bypasses YouTube's Trusted Types CSP.
+   */
+  window.addEventListener('__nodex_load_script', (e) => {
+    const { url, id } = e.detail || {}
+    if (!url || !id) return
+
+    let relativePath = url
+    if (url.startsWith('chrome-extension://')) {
+      const pathStart = url.indexOf('/', 'chrome-extension://'.length)
+      if (pathStart !== -1) relativePath = url.substring(pathStart + 1)
+    }
+
+    window.postMessage({
+      type: 'NODEX_INJECT_SCRIPT',
+      path: relativePath,
+      requestId: id,
+    }, '*')
+  })
+
+  window.addEventListener('message', (e) => {
+    if (e.source !== window) return
+    if (e.data?.type === 'NODEX_INJECT_SCRIPT_RESULT' && e.data.requestId) {
+      window.dispatchEvent(new CustomEvent('__nodex_script_loaded', {
+        detail: { id: e.data.requestId },
+      }))
+    }
+  })
+
   async function initMediaPipe() {
     await requestMediaPipeInjection()
     await waitForGlobal('FaceMesh')
@@ -143,11 +101,10 @@
     })
 
     await faceMesh.initialize()
-    _patchActive = false
   }
 
   async function startCamera() {
-    videoEl = _origCreateElement('video')
+    videoEl = document.createElement('video')
     videoEl.setAttribute('playsinline', '')
     videoEl.muted = true
     videoEl.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;'
@@ -175,8 +132,6 @@
 
   async function stopCamera() {
     running = false
-    _patchActive = false
-    document.createElement = _origCreateElement
     if (camera) { await camera.stop(); camera = null }
     if (videoEl) {
       const stream = videoEl.srcObject
@@ -198,7 +153,6 @@
         await initMediaPipe()
         await startCamera()
       } catch (err) {
-        _patchActive = false
         console.error('[Nodex Bridge] init failed:', err)
         window.postMessage({ type: 'NODEX_BRIDGE_ERROR', error: err.message }, '*')
       }

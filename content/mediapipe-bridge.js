@@ -55,50 +55,35 @@
   }
 
   /**
-   * YouTube enforces Trusted Types and blocks `script.setAttribute('src', url)`.
-   * MediaPipe calls this internally during faceMesh.initialize() to load WASM.
-   * We patch setAttribute on both HTMLScriptElement and Element prototypes,
-   * bypass via the real `src` setter from the prototype chain, then restore in finally.
+   * face_mesh.js's patched Vb() dispatches __nodex_load_script with {url, id}.
+   * We relay through the isolated world → service worker → chrome.scripting.executeScript,
+   * which completely bypasses YouTube's Trusted Types CSP.
    */
-  function installSetAttributePatch() {
-    const _origHTMLScript = HTMLScriptElement.prototype.setAttribute
-    const _origElement    = Element.prototype.setAttribute
+  window.addEventListener('__nodex_load_script', (e) => {
+    const { url, id } = e.detail || {}
+    if (!url || !id) return
 
-    function bypassSrc(el, value) {
-      let proto = Object.getPrototypeOf(el)
-      while (proto) {
-        const desc = Object.getOwnPropertyDescriptor(proto, 'src')
-        if (desc && desc.set) { desc.set.call(el, value); return }
-        proto = Object.getPrototypeOf(proto)
-      }
-      // Last resort: define own property
-      Object.defineProperty(el, 'src', { value, writable: true, configurable: true })
+    let relativePath = url
+    if (url.startsWith('chrome-extension://')) {
+      const pathStart = url.indexOf('/', 'chrome-extension://'.length)
+      if (pathStart !== -1) relativePath = url.substring(pathStart + 1)
     }
 
-    HTMLScriptElement.prototype.setAttribute = function (name, value) {
-      if (name === 'src') {
-        try { _origHTMLScript.call(this, name, value) }
-        catch (_e) { bypassSrc(this, value) }
-        return
-      }
-      return _origHTMLScript.call(this, name, value)
-    }
+    window.postMessage({
+      type: 'NODEX_INJECT_SCRIPT',
+      path: relativePath,
+      requestId: id,
+    }, '*')
+  })
 
-    Element.prototype.setAttribute = function (name, value) {
-      if (name === 'src' && this instanceof HTMLScriptElement) {
-        try { _origElement.call(this, name, value) }
-        catch (_e) { bypassSrc(this, value) }
-        return
-      }
-      return _origElement.call(this, name, value)
+  window.addEventListener('message', (e) => {
+    if (e.source !== window) return
+    if (e.data?.type === 'NODEX_INJECT_SCRIPT_RESULT' && e.data.requestId) {
+      window.dispatchEvent(new CustomEvent('__nodex_script_loaded', {
+        detail: { id: e.data.requestId },
+      }))
     }
-
-    // Returns a restore function
-    return () => {
-      HTMLScriptElement.prototype.setAttribute = _origHTMLScript
-      Element.prototype.setAttribute          = _origElement
-    }
-  }
+  })
 
   async function initMediaPipe() {
     await requestMediaPipeInjection()
@@ -115,14 +100,7 @@
       if (lm) window.postMessage({ type: 'NODEX_LANDMARKS', data: lm }, '*')
     })
 
-    // Patch setAttribute BEFORE initialize() — MediaPipe sets script.src for WASM inside it.
-    // YouTube's Trusted Types policy blocks this. Restore immediately after in finally.
-    const restorePatch = installSetAttributePatch()
-    try {
-      await faceMesh.initialize()
-    } finally {
-      restorePatch()
-    }
+    await faceMesh.initialize()
   }
 
   async function startCamera() {

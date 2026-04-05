@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build",
+    "dev": "node node_modules/vite/bin/vite.js build --watch",
+    "build": "node node_modules/vite/bin/vite.js build",
     "zip": "cd dist && zip -r ../nodex.zip ."
   },
   "dependencies": {

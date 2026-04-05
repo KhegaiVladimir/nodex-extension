@@ -52,11 +52,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "content/mediapipe-bridge.js",
-        "assets/mediapipe/*.js",
-        "assets/mediapipe/*.wasm",
-        "assets/mediapipe/*.data",
-        "assets/mediapipe/*.binarypb"
+        "assets/mediapipe/*",
+        "content/*",
+        "sidepanel/*"
       ],
       "matches": ["https://www.youtube.com/*"]
     }

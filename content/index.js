@@ -134,7 +134,6 @@ class NodexContentScript {
       try {
         chrome.runtime.sendMessage({ type: 'INJECT_MEDIAPIPE' }, (response) => {
           if (chrome.runtime.lastError) {
-            // Context invalidated or SW not responding — notify bridge so it doesn't hang
             window.postMessage({
               type:  'NODEX_INJECT_MEDIAPIPE_RESULT',
               ok:    false,
@@ -149,10 +148,39 @@ class NodexContentScript {
           }, '*')
         })
       } catch (err) {
-        // Extension context invalidated — swallow silently
         window.postMessage({
           type: 'NODEX_INJECT_MEDIAPIPE_RESULT',
           ok: false,
+          error: err.message,
+        }, '*')
+      }
+    }
+
+    if (e.data?.type === 'NODEX_INJECT_SCRIPT') {
+      const { path, requestId } = e.data
+      try {
+        chrome.runtime.sendMessage({ type: 'INJECT_SCRIPT', path, requestId }, (response) => {
+          if (chrome.runtime.lastError) {
+            window.postMessage({
+              type: 'NODEX_INJECT_SCRIPT_RESULT',
+              ok: false,
+              requestId,
+              error: chrome.runtime.lastError.message,
+            }, '*')
+            return
+          }
+          window.postMessage({
+            type: 'NODEX_INJECT_SCRIPT_RESULT',
+            ok: response?.ok ?? false,
+            requestId,
+            error: response?.error ?? null,
+          }, '*')
+        })
+      } catch (err) {
+        window.postMessage({
+          type: 'NODEX_INJECT_SCRIPT_RESULT',
+          ok: false,
+          requestId,
           error: err.message,
         }, '*')
       }
@@ -222,9 +250,12 @@ class NodexContentScript {
 
   _sendToSidePanel(payload) {
     try {
+      // Must NOT spread payload into the same object as `type`: inner `type`
+      // (ENGINE_STATUS, etc.) would overwrite CONTENT_TO_SIDEPANEL and the SW
+      // would never relay to the side panel.
       chrome.runtime.sendMessage({
         type: MSG.CONTENT_TO_SIDEPANEL,
-        ...payload,
+        payload,
       }).catch(() => {})
     } catch (_e) {
       // Extension context invalidated — ignore

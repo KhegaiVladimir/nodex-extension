@@ -28,10 +28,12 @@ async function getActiveTabId() {
 async function sendToContent(payload) {
   const tabId = await getActiveTabId()
   if (tabId == null) return
+  // Must NOT spread payload: inner `type` (START_ENGINE, etc.) would overwrite
+  // SIDEPANEL_TO_CONTENT and the SW would never forward to the tab.
   chrome.runtime.sendMessage({
     type: MSG.SIDEPANEL_TO_CONTENT,
     tabId,
-    ...payload,
+    inner: payload,
   }).catch(() => {})
 }
 
