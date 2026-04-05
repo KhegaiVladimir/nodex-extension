@@ -323,6 +323,7 @@ function useCalibration() {
         yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
         pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
         roll:  frames.reduce((s, f) => s + (f.roll ?? 0), 0) / frames.length,
+        ear:   frames.reduce((s, f) => s + (f.ear ?? 0), 0) / frames.length,
       }
 
       try {

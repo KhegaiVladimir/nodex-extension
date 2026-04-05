@@ -10,12 +10,16 @@ const KEY_MAP = {
   [COMMANDS.REWIND]:     { key: 'j', code: 'KeyJ', keyCode: 74 },
   [COMMANDS.SKIP]:       { key: 'l', code: 'KeyL', keyCode: 76 },
   [COMMANDS.NEXT]:       { key: 'N', code: 'KeyN', keyCode: 78, shiftKey: true },
-  [COMMANDS.PREV]:       { key: 'P', code: 'KeyP', keyCode: 80, shiftKey: true },
 }
 
 export class YouTubeController {
   execute(command) {
     if (document.querySelector('.ad-showing')) return false
+
+    if (command === COMMANDS.PREV) {
+      history.back()
+      return true
+    }
 
     const mapping = KEY_MAP[command]
     if (!mapping) return false

@@ -64,7 +64,8 @@ export class GestureEngine {
     this._onMetrics?.(metrics)
 
     // --- Eye-close timing (blink filter) ---
-    const eyesClosed = ear < T.earClose
+    const earThreshold = (bl?.ear > 0) ? bl.ear * 0.65 : T.earClose
+    const eyesClosed = ear < earThreshold
     if (eyesClosed) {
       if (this._eyeCloseStart === null) {
         this._eyeCloseStart = Date.now()
