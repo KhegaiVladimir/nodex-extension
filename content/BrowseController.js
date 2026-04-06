@@ -25,6 +25,7 @@ export class BrowseController {
   }
 
   activate() {
+    this.deactivate()
     this._createFocusRing()
     this._scanItems()
     this._focusFirstVisible()
@@ -44,17 +45,18 @@ export class BrowseController {
   }
 
   deactivate() {
-    if (this._focusRing) {
-      this._focusRing.style.display = 'none'
-      this._focusRing.remove()
-      this._focusRing = null
-    }
-    this._observer?.disconnect()
-    this._observer = null
     clearTimeout(this._scanDebounce)
     clearTimeout(this._retryTimer)
     cancelAnimationFrame(this._scrollRaf)
+    this._observer?.disconnect()
+    this._observer = null
     window.removeEventListener('scroll', this._onScroll)
+
+    if (this._focusRing) {
+      this._focusRing.remove()
+      this._focusRing = null
+    }
+
     this._focusIndex = -1
     this._currentItems = []
     this._rows = []
@@ -109,32 +111,35 @@ export class BrowseController {
     const retry = () => {
       attempts++
       this._scanItems()
-      if (this._currentItems.length > 0) {
-        this._focusFirstVisible()
-        return
-      }
-      if (attempts < 5) this._retryTimer = setTimeout(retry, 800)
+      if (this._currentItems.length > 0) return
+      if (attempts < 10) this._retryTimer = setTimeout(retry, 600)
     }
-    this._retryTimer = setTimeout(retry, 800)
+    this._retryTimer = setTimeout(retry, 500)
   }
 
   _scanItems() {
     const hadItems = this._currentItems.length > 0
 
-    let items = [...document.querySelectorAll(PRIMARY_SELECTORS.join(','))]
+    let items = this._queryVisibleItems(PRIMARY_SELECTORS.join(','))
 
     if (items.length === 0) {
-      items = [...document.querySelectorAll(FALLBACK_SELECTOR)].filter(el => {
-        if (el.closest('ytd-playlist-renderer, #masthead')) return false
-        if (el.href?.includes('&list=')) return false
-        const r = el.getBoundingClientRect()
-        return r.width >= 100 && r.height >= 60
-      })
+      items = this._queryVisibleItems(FALLBACK_SELECTOR)
+        .filter(el => {
+          if (el.closest('ytd-playlist-renderer, #masthead')) return false
+          if (el.href?.includes('&list=')) return false
+          const r = el.getBoundingClientRect()
+          return r.width >= 100 && r.height >= 60
+        })
     }
 
-    items = items.filter(el =>
-      el.offsetParent !== null && el.getBoundingClientRect().height > 0,
-    )
+    if (items.length === 0) {
+      const rawP = document.querySelectorAll(PRIMARY_SELECTORS.join(',')).length
+      const rawF = document.querySelectorAll(FALLBACK_SELECTOR).length
+      if (rawP > 0 || rawF > 0) {
+        console.warn(`[Nodex Browse] Items exist but none visible. raw primary=${rawP}, raw fallback=${rawF}`)
+      }
+    }
+
     items.sort((a, b) => {
       const ar = a.getBoundingClientRect(), br = b.getBoundingClientRect()
       return Math.abs(ar.top - br.top) < ROW_TOLERANCE
@@ -165,6 +170,13 @@ export class BrowseController {
     } else if (this._focusIndex >= 0) {
       this._highlightItem(this._focusIndex)
     }
+  }
+
+  _queryVisibleItems(selector) {
+    return [...document.querySelectorAll(selector)].filter(el => {
+      const r = el.getBoundingClientRect()
+      return r.width > 0 && r.height > 0
+    })
   }
 
   _moveFocus(delta) {

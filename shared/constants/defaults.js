@@ -1,7 +1,7 @@
 import { GESTURES } from './gestures.js'
 import { COMMANDS } from './commands.js'
 
-export const DEFAULT_GESTURE_MAP = {
+export const PLAYER_GESTURE_MAP = {
   [GESTURES.HEAD_LEFT]:   COMMANDS.REWIND,
   [GESTURES.HEAD_RIGHT]:  COMMANDS.SKIP,
   [GESTURES.HEAD_UP]:     COMMANDS.VOL_UP,
@@ -9,13 +9,27 @@ export const DEFAULT_GESTURE_MAP = {
   [GESTURES.TILT_LEFT]:   COMMANDS.PREV,
   [GESTURES.TILT_RIGHT]:  COMMANDS.NEXT,
   [GESTURES.EYES_CLOSED]: COMMANDS.PLAY_PAUSE,
+  [GESTURES.MOUTH_OPEN]:  COMMANDS.MUTE,
 }
+
+export const BROWSE_GESTURE_MAP = {
+  [GESTURES.HEAD_LEFT]:   COMMANDS.REWIND,
+  [GESTURES.HEAD_RIGHT]:  COMMANDS.SKIP,
+  [GESTURES.HEAD_UP]:     COMMANDS.VOL_UP,
+  [GESTURES.HEAD_DOWN]:   COMMANDS.VOL_DOWN,
+  [GESTURES.EYES_CLOSED]: COMMANDS.PLAY_PAUSE,
+  [GESTURES.TILT_LEFT]:   COMMANDS.BACK,
+  [GESTURES.TILT_RIGHT]:  COMMANDS.NONE,
+  [GESTURES.MOUTH_OPEN]:  COMMANDS.NONE,
+}
+
+export const DEFAULT_GESTURE_MAP = PLAYER_GESTURE_MAP
 
 export const DEFAULT_COOLDOWNS = {
   [GESTURES.HEAD_UP]:     200,
   [GESTURES.HEAD_DOWN]:   200,
-  [GESTURES.HEAD_LEFT]:   600,
-  [GESTURES.HEAD_RIGHT]:  600,
+  [GESTURES.HEAD_LEFT]:   400,
+  [GESTURES.HEAD_RIGHT]:  400,
   [GESTURES.TILT_LEFT]:   800,
   [GESTURES.TILT_RIGHT]:  800,
   [GESTURES.EYES_CLOSED]: 1000,
@@ -26,14 +40,17 @@ export const DEFAULT_THRESHOLDS = {
   yaw: 15,
   pitch: 12,
   roll: 15,
-  earClose: 0.18,
+  earClose: 0.22,
   mouthOpen: 0.55,
-  hysteresis: 5,
+  hysteresis: 3,
 }
 
-export const EYE_CLOSE_MIN_MS   = 350
+export const EYE_CLOSE_MIN_MS   = 250
 export const EYE_CLOSE_MAX_MS   = 700
 export const LONG_BLINK_MAX_MS  = 1500
+
+export const CALIBRATION_BLINK_MIN_MS = 1500
+export const CALIBRATION_BLINK_MAX_MS = 3000
 
 export const SENSITIVITY_PRESETS = {
   low: {
@@ -42,15 +59,15 @@ export const SENSITIVITY_PRESETS = {
     roll: 18,
     earClose: 0.16,
     mouthOpen: 0.62,
-    hysteresis: 6,
+    hysteresis: 4,
   },
   medium: DEFAULT_THRESHOLDS,
   high: {
     yaw: 12,
-    pitch: 9,
+    pitch: 7,
     roll: 12,
-    earClose: 0.20,
+    earClose: 0.24,
     mouthOpen: 0.48,
-    hysteresis: 4,
+    hysteresis: 2,
   },
 }

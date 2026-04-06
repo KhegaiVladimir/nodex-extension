@@ -1,7 +1,9 @@
 const KEYS = {
-  CALIBRATION: 'nodex_calibration',
-  SETTINGS:    'nodex_settings',
-  GESTURE_MAP: 'nodex_gesture_map',
+  CALIBRATION:       'nodex_calibration',
+  SETTINGS:          'nodex_settings',
+  GESTURE_MAP:       'nodex_gesture_map',
+  PLAYER_GESTURE_MAP: 'nodex_player_gesture_map',
+  BROWSE_GESTURE_MAP: 'nodex_browse_gesture_map',
 }
 
 async function get(key) {
@@ -43,4 +45,24 @@ export async function loadGestureMap(defaults = {}) {
 
 export async function saveGestureMap(map) {
   await set(KEYS.GESTURE_MAP, map)
+}
+
+export async function loadPlayerGestureMap(defaults = {}) {
+  const stored = await get(KEYS.PLAYER_GESTURE_MAP)
+  if (stored) return { ...defaults, ...stored }
+  const legacy = await get(KEYS.GESTURE_MAP)
+  return { ...defaults, ...(legacy ?? {}) }
+}
+
+export async function savePlayerGestureMap(map) {
+  await set(KEYS.PLAYER_GESTURE_MAP, map)
+}
+
+export async function loadBrowseGestureMap(defaults = {}) {
+  const stored = await get(KEYS.BROWSE_GESTURE_MAP)
+  return { ...defaults, ...(stored ?? {}) }
+}
+
+export async function saveBrowseGestureMap(map) {
+  await set(KEYS.BROWSE_GESTURE_MAP, map)
 }

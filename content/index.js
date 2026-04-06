@@ -1,13 +1,18 @@
 import { MSG } from '../shared/constants/messages.js'
+import { COMMANDS } from '../shared/constants/commands.js'
 import {
-  DEFAULT_GESTURE_MAP,
+  PLAYER_GESTURE_MAP,
+  BROWSE_GESTURE_MAP,
   DEFAULT_COOLDOWNS,
   DEFAULT_THRESHOLDS,
 } from '../shared/constants/defaults.js'
 import {
   loadCalibration,
   loadSettings,
-  loadGestureMap,
+  loadPlayerGestureMap,
+  loadBrowseGestureMap,
+  savePlayerGestureMap,
+  saveBrowseGestureMap,
   saveCalibration,
   saveSettings,
 } from '../shared/storage.js'
@@ -31,6 +36,7 @@ const LANDMARK_TIMEOUT_MS  = 5000
 const MAX_RESTART_ATTEMPTS = 3
 const RESTART_COOLDOWN_MS  = 2000
 const FRAME_BUDGET_MS      = 38
+const INLINE_CALIBRATION_MS = 3000
 
 class NodexContentScript {
   constructor() {
@@ -43,6 +49,10 @@ class NodexContentScript {
     this._running          = false
     this._frameCount       = 0
     this._destroyed        = false
+    this._calibrating      = false
+
+    this._playerGestureMap = null
+    this._browseGestureMap = null
 
     this._onMessage       = this._handleMessage.bind(this)
     this._onWindowMessage = this._handleWindowMessage.bind(this)
@@ -52,31 +62,37 @@ class NodexContentScript {
     this._restartAttempts     = 0
     this._contextValid        = true
     this._lastFrameProcessedAt = 0
-    this._lastUrl             = location.href
+    this._lastPath            = location.pathname
     this._navPollTimer        = null
+    this._autoModeTimer       = null
   }
 
   async init() {
-    const [calibration, settings, gestureMap] = await Promise.all([
+    const [calibration, settings, playerMap, browseMap] = await Promise.all([
       loadCalibration(),
       loadSettings({
         thresholds:    DEFAULT_THRESHOLDS,
         cooldowns:     DEFAULT_COOLDOWNS,
         engine_active: false,
       }),
-      loadGestureMap(DEFAULT_GESTURE_MAP),
+      loadPlayerGestureMap(PLAYER_GESTURE_MAP),
+      loadBrowseGestureMap(BROWSE_GESTURE_MAP),
     ])
 
+    this._playerGestureMap = playerMap
+    this._browseGestureMap = browseMap
+
     this._hud = new HUD()
-    await this._hud.mount()
+    this._hud.mount()
 
     this._gestureEngine = new GestureEngine({
       thresholds: settings.thresholds ?? DEFAULT_THRESHOLDS,
       cooldowns:  settings.cooldowns  ?? DEFAULT_COOLDOWNS,
-      gestureMap,
+      gestureMap: this._browseMode ? this._browseGestureMap : this._playerGestureMap,
       baseline:   calibration,
       onCommand:  (cmd, gesture, metrics) => this._handleCommand(cmd, gesture, metrics),
       onMetrics:  (metrics) => this._handleMetrics(metrics),
+      onCalibrationRequest: () => this._startInlineCalibration(),
     })
 
     window.addEventListener('message', this._onWindowMessage)
@@ -102,7 +118,7 @@ class NodexContentScript {
 
     this._hud.show()
     this._startWatchdog()
-    this._autoSetMode()
+    if (!this._manualModeOverride) this._autoSetMode()
     await saveSettings({ engine_active: true }).catch(() => {})
     this._sendStatus()
   }
@@ -112,18 +128,13 @@ class NodexContentScript {
     this._stopWatchdog()
     this._running = false
 
-    if (this._browseMode) {
-      this._browseMode = false
-      this._browseController.deactivate()
-    }
+    this._setMode(false)
 
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
 
     this._hud?.hide()
-    this._hud?.setModeIndicator(false)
     await saveSettings({ engine_active: false }).catch(() => {})
     this._sendStatus()
-    this._sendToSidePanel({ type: MSG.BROWSE_MODE_CHANGED, browseMode: false })
   }
 
   async destroy() {
@@ -131,11 +142,9 @@ class NodexContentScript {
     this._stopWatchdog()
     this._destroyed = true
 
-    if (this._browseMode) {
-      this._browseMode = false
-      this._browseController.deactivate()
-    }
+    this._setMode(false)
     clearInterval(this._navPollTimer)
+    clearTimeout(this._autoModeTimer)
 
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
     window.removeEventListener('message', this._onWindowMessage)
@@ -146,6 +155,29 @@ class NodexContentScript {
 
     this._gestureEngine = null
     this._hud           = null
+  }
+
+  // --- Single entry point for mode changes ---
+
+  _setMode(browse) {
+    if (browse === this._browseMode) return
+    this._browseMode = browse
+
+    const map = browse ? this._browseGestureMap : this._playerGestureMap
+    this._gestureEngine?.updateSettings({ gestureMap: map })
+
+    if (browse) {
+      const count = this._browseController.activate()
+      if (count === 0) this._hud?.showCommand('NO_VIDEOS')
+    } else {
+      this._browseController.deactivate()
+    }
+
+    this._hud?.setModeIndicator(browse)
+    this._sendToSidePanel({
+      type: MSG.BROWSE_MODE_CHANGED,
+      browseMode: browse,
+    })
   }
 
   _handleWindowMessage(e) {
@@ -167,12 +199,6 @@ class NodexContentScript {
       this._hud?.showWarning('Ошибка камеры: ' + (e.data.error ?? 'неизвестно'))
     }
 
-    /**
-     * Мост (MAIN world) не может вызвать chrome.scripting напрямую.
-     * Он шлёт сюда запрос, мы проксируем в service worker.
-     * Оборачиваем в try/catch — если контекст расширения протух
-     * (Extension context invalidated), просто молча выходим.
-     */
     if (e.data?.type === 'NODEX_INJECT_MEDIAPIPE') {
       try {
         chrome.runtime.sendMessage({ type: 'INJECT_MEDIAPIPE' }, (response) => {
@@ -232,10 +258,14 @@ class NodexContentScript {
 
   _handleCommand(cmd, gesture, metrics) {
     if (document.visibilityState === 'hidden') return
+    if (cmd === COMMANDS.NONE) return
 
     const controller = this._browseMode ? this._browseController : this._ytController
     const applied = controller.execute(cmd)
-    this._hud?.showCommand(cmd)
+
+    if (applied) {
+      this._hud?.showCommand(cmd, this._browseMode)
+    }
 
     this._sendToSidePanel({
       type: MSG.COMMAND_EXECUTED,
@@ -280,7 +310,19 @@ class NodexContentScript {
       case MSG.UPDATE_SETTINGS: {
         const patch = message.settings ?? {}
         saveSettings(patch).catch(console.error)
-        this._gestureEngine?.updateSettings(patch)
+        if (patch.playerGestureMap) {
+          this._playerGestureMap = patch.playerGestureMap
+          savePlayerGestureMap(patch.playerGestureMap).catch(console.error)
+        }
+        if (patch.browseGestureMap) {
+          this._browseGestureMap = patch.browseGestureMap
+          saveBrowseGestureMap(patch.browseGestureMap).catch(console.error)
+        }
+        const activeMap = this._browseMode ? this._browseGestureMap : this._playerGestureMap
+        this._gestureEngine?.updateSettings({
+          ...patch,
+          gestureMap: activeMap,
+        })
         break
       }
 
@@ -289,7 +331,8 @@ class NodexContentScript {
         break
 
       case MSG.TOGGLE_BROWSE_MODE:
-        this._toggleBrowseMode(true)
+        this._manualModeOverride = true
+        this._setMode(!this._browseMode)
         this._hud?.showCommand(this._browseMode ? 'BROWSE_ON' : 'BROWSE_OFF')
         break
 
@@ -300,32 +343,75 @@ class NodexContentScript {
     sendResponse?.({ ok: true })
   }
 
-  _toggleBrowseMode(manual = false) {
-    if (manual) this._manualModeOverride = true
-    this._browseMode = !this._browseMode
-    if (this._browseMode) {
-      const count = this._browseController.activate()
-      if (count === 0) this._hud?.showCommand('NO_VIDEOS')
-    } else {
-      this._browseController.deactivate()
+  // --- Inline calibration via long blink ---
+
+  _startInlineCalibration() {
+    if (this._calibrating) return
+    this._calibrating = true
+
+    this._hud?.showWarning('Калибровка... Смотрите прямо (3 сек)')
+    this._gestureEngine?.updateSettings({ blocked: true })
+
+    const frames = []
+    const started = Date.now()
+
+    const originalOnMetrics = this._gestureEngine._onMetrics
+    this._gestureEngine._onMetrics = (metrics) => {
+      frames.push(metrics)
+      originalOnMetrics?.(metrics)
+
+      if (Date.now() - started >= INLINE_CALIBRATION_MS && frames.length > 0) {
+        this._gestureEngine._onMetrics = originalOnMetrics
+        this._finishInlineCalibration(frames)
+      }
     }
-    this._hud?.setModeIndicator(this._browseMode)
+
+    setTimeout(() => {
+      if (!this._calibrating) return
+      this._gestureEngine._onMetrics = originalOnMetrics
+      if (frames.length > 0) {
+        this._finishInlineCalibration(frames)
+      } else {
+        this._calibrating = false
+        this._gestureEngine?.updateSettings({ blocked: false })
+        this._hud?.showWarning('Калибровка не удалась')
+      }
+    }, INLINE_CALIBRATION_MS + 2000)
+  }
+
+  async _finishInlineCalibration(frames) {
+    if (!this._calibrating) return
+    const baseline = {
+      yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
+      pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
+      roll:  frames.reduce((s, f) => s + (f.roll ?? 0), 0) / frames.length,
+      ear:   frames.reduce((s, f) => s + (f.ear ?? 0), 0) / frames.length,
+    }
+
+    await saveCalibration(baseline).catch(console.error)
+    this._gestureEngine?.updateSettings({ baseline, blocked: false })
+    this._calibrating = false
+    this._hud?.showCommand('CALIBRATED')
+
     this._sendToSidePanel({
-      type: MSG.BROWSE_MODE_CHANGED,
-      browseMode: this._browseMode,
+      type: MSG.SAVE_CALIBRATION,
+      baseline,
     })
   }
 
+  // --- Navigation observation ---
+
   _observeNavigation() {
     const onNavigate = () => {
-      if (this._lastUrl === location.href) return
-      this._lastUrl = location.href
+      const currentPath = location.pathname
+      if (this._lastPath === currentPath) return
+      this._lastPath = currentPath
       if (!this._running) return
-      if (this._manualModeOverride) {
-        this._manualModeOverride = false
-        return
-      }
-      this._autoSetMode()
+
+      this._manualModeOverride = false
+
+      clearTimeout(this._autoModeTimer)
+      this._autoModeTimer = setTimeout(() => this._autoSetMode(), 800)
     }
 
     try {
@@ -338,21 +424,11 @@ class NodexContentScript {
   }
 
   _autoSetMode() {
-    const url = location.href
-    const shouldBrowse = !url.includes('/watch') && !url.includes('/shorts/')
-    if (shouldBrowse === this._browseMode) return
-    this._browseMode = shouldBrowse
-    if (shouldBrowse) {
-      const count = this._browseController.activate()
-      if (count === 0) this._hud?.showCommand('NO_VIDEOS')
-    } else {
-      this._browseController.deactivate()
-    }
-    this._hud?.setModeIndicator(this._browseMode)
-    this._sendToSidePanel({
-      type: MSG.BROWSE_MODE_CHANGED,
-      browseMode: this._browseMode,
-    })
+    if (this._manualModeOverride) return
+
+    const path = location.pathname
+    const isPlayerPage = /^\/(watch|shorts\/|live\/|clip\/|embed\/)/.test(path)
+    this._setMode(!isPlayerPage)
   }
 
   _startWatchdog() {

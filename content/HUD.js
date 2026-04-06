@@ -17,6 +17,16 @@ const COMMAND_LABELS = Object.freeze({
   BROWSE_ON:             '🔍 Навигация',
   BROWSE_OFF:            '▶️ Плеер',
   NO_VIDEOS:             '⚠ Нет видео на странице',
+  CALIBRATED:            '✓ Калибровка сохранена',
+})
+
+const BROWSE_COMMAND_LABELS = Object.freeze({
+  [COMMANDS.REWIND]:     '← Влево',
+  [COMMANDS.SKIP]:       '→ Вправо',
+  [COMMANDS.VOL_UP]:     '↑ Вверх',
+  [COMMANDS.VOL_DOWN]:   '↓ Вниз',
+  [COMMANDS.PLAY_PAUSE]: '✓ Выбрать',
+  [COMMANDS.BACK]:       '↩ Назад',
 })
 
 const HUD_STYLES = /* css */ `
@@ -37,16 +47,6 @@ const HUD_STYLES = /* css */ `
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
-  }
-
-  .nodex-video {
-    width: 160px;
-    height: 120px;
-    border-radius: 8px;
-    border: 2px solid #c8f55a;
-    object-fit: cover;
-    background: #000;
-    transform: scaleX(-1);
   }
 
   .nodex-metrics {
@@ -126,21 +126,14 @@ export class HUD {
   constructor() {
     this._host       = null
     this._shadow     = null
-    this._videoEl    = null
     this._container  = null
     this._metrics    = null
     this._toast      = null
     this._toastTimer = null
-    this._stream     = null
     this._modeBadge  = null
   }
 
-  /**
-   * Creates the Shadow DOM host, requests camera, returns the video element
-   * that FaceEngine will use.
-   * @returns {Promise<HTMLVideoElement>}
-   */
-  async mount() {
+  mount() {
     this._host = document.createElement('div')
     this._host.id = 'nodex-hud-host'
     this._shadow = this._host.attachShadow({ mode: 'closed' })
@@ -152,12 +145,6 @@ export class HUD {
     this._container = document.createElement('div')
     this._container.className = 'nodex-container'
 
-    this._videoEl = document.createElement('video')
-    this._videoEl.className = 'nodex-video'
-    this._videoEl.setAttribute('playsinline', '')
-    this._videoEl.setAttribute('autoplay', '')
-    this._videoEl.muted = true
-
     this._metrics = this._buildMetrics()
 
     this._toast = document.createElement('div')
@@ -168,18 +155,11 @@ export class HUD {
     this._modeBadge.textContent = '▶️ Плеер'
 
     this._container.appendChild(this._modeBadge)
-    this._container.appendChild(this._videoEl)
     this._container.appendChild(this._metrics)
     this._shadow.appendChild(this._container)
     this._shadow.appendChild(this._toast)
 
     document.body.appendChild(this._host)
-
-    this._stream = await this._requestCamera()
-    this._videoEl.srcObject = this._stream
-    await this._videoEl.play()
-
-    return this._videoEl
   }
 
   show() {
@@ -190,14 +170,12 @@ export class HUD {
     if (this._container) this._container.classList.add('hidden')
   }
 
-  /**
-   * Shows a toast with a human-readable Russian label for the command.
-   */
-  showCommand(command) {
+  showCommand(command, browseMode = false) {
     if (!this._toast) return
 
     this._toast.classList.remove('warning')
-    const label = COMMAND_LABELS[command] ?? command
+    const labels = browseMode ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
+    const label = labels[command] ?? COMMAND_LABELS[command] ?? command
     this._toast.textContent = label
     this._toast.classList.add('visible')
 
@@ -226,10 +204,6 @@ export class HUD {
     }, 5000)
   }
 
-  /**
-   * Updates the yaw / pitch / EAR indicator values.
-   * @param {{ yaw: number, pitch: number, roll: number, ear: number, mouth: number }} metrics
-   */
   updateMetrics(metrics) {
     if (!this._metrics) return
     this._setMetric('yaw',   metrics.yaw)
@@ -237,21 +211,8 @@ export class HUD {
     this._setMetric('ear',   metrics.ear)
   }
 
-  /**
-   * Stops all camera tracks and removes the HUD from the DOM.
-   */
   unmount() {
     clearTimeout(this._toastTimer)
-
-    if (this._stream) {
-      for (const track of this._stream.getTracks()) track.stop()
-      this._stream = null
-    }
-
-    if (this._videoEl) {
-      this._videoEl.srcObject = null
-      this._videoEl = null
-    }
 
     if (this._host?.parentNode) {
       this._host.parentNode.removeChild(this._host)
@@ -296,31 +257,5 @@ export class HUD {
     const el = this._metrics?.querySelector(`[data-metric="${key}"]`)
     if (!el) return
     el.textContent = typeof value === 'number' ? value.toFixed(1) : '—'
-  }
-
-  /**
-   * Requests the user-facing camera.
-   * Provides clear error messages for common failure modes.
-   * @returns {Promise<MediaStream>}
-   */
-  async _requestCamera() {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
-        audio: false,
-      })
-    } catch (err) {
-      if (err.name === 'NotAllowedError') {
-        throw new Error(
-          'Доступ к камере запрещён. Разрешите доступ в настройках браузера и перезагрузите страницу.'
-        )
-      }
-      if (err.name === 'NotFoundError') {
-        throw new Error(
-          'Камера не найдена. Подключите камеру и перезагрузите страницу.'
-        )
-      }
-      throw new Error(`Ошибка камеры: ${err.message}`)
-    }
   }
 }

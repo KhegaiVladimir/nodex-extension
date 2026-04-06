@@ -3,15 +3,18 @@ import { MSG } from '../shared/constants/messages.js'
 import { GESTURES } from '../shared/constants/gestures.js'
 import { COMMANDS } from '../shared/constants/commands.js'
 import {
-  DEFAULT_GESTURE_MAP,
+  PLAYER_GESTURE_MAP,
+  BROWSE_GESTURE_MAP,
   DEFAULT_THRESHOLDS,
   SENSITIVITY_PRESETS,
 } from '../shared/constants/defaults.js'
 import {
   saveCalibration,
-  saveGestureMap,
+  savePlayerGestureMap,
+  saveBrowseGestureMap,
   saveSettings,
-  loadGestureMap,
+  loadPlayerGestureMap,
+  loadBrowseGestureMap,
   loadSettings,
 } from '../shared/storage.js'
 
@@ -378,6 +381,7 @@ export default function App() {
   const [screen, setScreen] = useState('main')
   const [running, setRunning] = useState(false)
   const [browseMode, setBrowseMode] = useState(false)
+  const [modeChanging, setModeChanging] = useState(false)
   const [metrics, setMetrics] = useState(null)
   const [lastCommand, setLastCommand] = useState(null)
 
@@ -403,6 +407,7 @@ export default function App() {
           break
         case MSG.BROWSE_MODE_CHANGED:
           setBrowseMode(message.browseMode)
+          setModeChanging(false)
           break
       }
     }
@@ -444,6 +449,13 @@ export default function App() {
         <MainScreen
           running={running}
           browseMode={browseMode}
+          modeChanging={modeChanging}
+          onModeToggle={() => {
+            if (modeChanging) return
+            setModeChanging(true)
+            sendToContent({ type: MSG.TOGGLE_BROWSE_MODE })
+            setTimeout(() => setModeChanging(false), 2000)
+          }}
           metrics={metrics}
           lastCommand={lastCommand}
         />
@@ -725,13 +737,9 @@ function OnboardStep4({ onComplete }) {
 
 /* ── Main Screen ── */
 
-function MainScreen({ running, browseMode, metrics, lastCommand }) {
+function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, lastCommand }) {
   const handleToggle = () => {
     sendToContent({ type: running ? MSG.STOP_ENGINE : MSG.START_ENGINE })
-  }
-
-  const handleBrowseToggle = () => {
-    sendToContent({ type: MSG.TOGGLE_BROWSE_MODE })
   }
 
   return (
@@ -759,8 +767,10 @@ function MainScreen({ running, browseMode, metrics, lastCommand }) {
               background: browseMode ? 'var(--accent)' : 'var(--surface)',
               color: browseMode ? '#0a0a0a' : 'var(--text)',
               border: '1px solid var(--border)',
+              opacity: modeChanging ? 0.5 : 1,
             }}
-            onClick={handleBrowseToggle}
+            onClick={onModeToggle}
+            disabled={modeChanging}
           >
             {browseMode ? '▶️ Плеер' : '🔍 Навигация'}
           </button>
@@ -863,14 +873,18 @@ function CalibrationScreen() {
 /* ── Settings Screen ── */
 
 function SettingsScreen() {
-  const [gestureMap, setGestureMap] = useState({ ...DEFAULT_GESTURE_MAP })
+  const [editingMode, setEditingMode] = useState('player')
+  const [playerMap, setPlayerMap] = useState({ ...PLAYER_GESTURE_MAP })
+  const [browseMap, setBrowseMap] = useState({ ...BROWSE_GESTURE_MAP })
   const [preset, setPreset] = useState('medium')
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     ;(async () => {
-      const map = await loadGestureMap(DEFAULT_GESTURE_MAP)
-      setGestureMap(map)
+      const pm = await loadPlayerGestureMap(PLAYER_GESTURE_MAP)
+      const bm = await loadBrowseGestureMap(BROWSE_GESTURE_MAP)
+      setPlayerMap(pm)
+      setBrowseMap(bm)
       const settings = await loadSettings({ thresholds: DEFAULT_THRESHOLDS })
       const th = settings.thresholds ?? DEFAULT_THRESHOLDS
       for (const [key, val] of Object.entries(SENSITIVITY_PRESETS)) {
@@ -882,8 +896,11 @@ function SettingsScreen() {
     })()
   }, [])
 
+  const currentMap = editingMode === 'player' ? playerMap : browseMap
+  const setCurrentMap = editingMode === 'player' ? setPlayerMap : setBrowseMap
+
   const handleGestureChange = (gesture, command) => {
-    setGestureMap((prev) => ({ ...prev, [gesture]: command }))
+    setCurrentMap((prev) => ({ ...prev, [gesture]: command }))
     setSaved(false)
   }
 
@@ -894,11 +911,16 @@ function SettingsScreen() {
 
   const handleSave = async () => {
     const thresholds = SENSITIVITY_PRESETS[preset] ?? DEFAULT_THRESHOLDS
-    await saveGestureMap(gestureMap)
+    await savePlayerGestureMap(playerMap)
+    await saveBrowseGestureMap(browseMap)
     await saveSettings({ thresholds })
     await sendToContent({
       type: MSG.UPDATE_SETTINGS,
-      settings: { thresholds, gestureMap },
+      settings: {
+        thresholds,
+        playerGestureMap: playerMap,
+        browseGestureMap: browseMap,
+      },
     })
     setSaved(true)
   }
@@ -910,13 +932,27 @@ function SettingsScreen() {
     <>
       <div style={S.card}>
         <div style={S.subheading}>Маппинг жестов</div>
+        <div style={{ ...S.nav, marginBottom: '10px' }}>
+          <button
+            style={{ ...S.navBtn, ...(editingMode === 'player' ? S.navBtnActive : {}) }}
+            onClick={() => setEditingMode('player')}
+          >
+            ▶ Плеер
+          </button>
+          <button
+            style={{ ...S.navBtn, ...(editingMode === 'browse' ? S.navBtnActive : {}) }}
+            onClick={() => setEditingMode('browse')}
+          >
+            🔍 Навигация
+          </button>
+        </div>
         {mappableGestures.map((g) => (
           <div key={g} style={S.gestureRow}>
             <span style={S.gestureLabel}>{GESTURE_LABELS[g] ?? g}</span>
             <div style={S.gestureSelect}>
               <select
                 style={S.select}
-                value={gestureMap[g] ?? COMMANDS.NONE}
+                value={currentMap[g] ?? COMMANDS.NONE}
                 onChange={(e) => handleGestureChange(g, e.target.value)}
               >
                 {commandOptions.map((c) => (
