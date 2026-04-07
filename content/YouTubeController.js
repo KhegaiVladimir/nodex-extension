@@ -16,8 +16,8 @@ export class YouTubeController {
   execute(command) {
     if (document.querySelector('.ad-showing')) return false
 
-    if (command === COMMANDS.PREV) {
-      history.back()
+    if (command === COMMANDS.PREV || command === COMMANDS.BACK) {
+      window.location.href = 'https://www.youtube.com/'
       return true
     }
 

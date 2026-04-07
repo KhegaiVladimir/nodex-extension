@@ -64,6 +64,22 @@ const COMMAND_LABELS = {
   [COMMANDS.NONE]:       '— Нет',
 }
 
+const BROWSE_COMMAND_LABELS = {
+  [COMMANDS.REWIND]:     '← Влево',
+  [COMMANDS.SKIP]:       '→ Вправо',
+  [COMMANDS.VOL_UP]:     '↑ Вверх',
+  [COMMANDS.VOL_DOWN]:   '↓ Вниз',
+  [COMMANDS.PLAY_PAUSE]: '✓ Выбрать',
+  [COMMANDS.BACK]:       '↩ Назад',
+  [COMMANDS.NONE]:       '— Нет',
+}
+
+const BROWSE_COMMANDS = [
+  COMMANDS.REWIND, COMMANDS.SKIP,
+  COMMANDS.VOL_UP, COMMANDS.VOL_DOWN,
+  COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.NONE,
+]
+
 const CALIBRATION_DURATION_MS = 3000
 const CALIBRATION_FPS = 15
 
@@ -309,6 +325,8 @@ function useCalibration() {
     setError(null)
     framesRef.current = []
     doneRef.current = false
+
+    sendToContent({ type: MSG.CALIBRATION_START })
 
     const started = Date.now()
 
@@ -742,6 +760,8 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
     sendToContent({ type: running ? MSG.STOP_ENGINE : MSG.START_ENGINE })
   }
 
+  const cmdLabels = browseMode ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
+
   return (
     <>
       <div style={S.card}>
@@ -781,7 +801,7 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
         <div style={S.card}>
           <div style={S.subheading}>Последняя команда</div>
           <div style={{ fontSize: '16px', color: 'var(--accent)' }}>
-            {COMMAND_LABELS[lastCommand.command] ?? lastCommand.command}
+            {cmdLabels[lastCommand.command] ?? COMMAND_LABELS[lastCommand.command] ?? lastCommand.command}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
             {GESTURE_LABELS[lastCommand.gesture] ?? lastCommand.gesture}
@@ -926,7 +946,9 @@ function SettingsScreen() {
   }
 
   const mappableGestures = Object.values(GESTURES).filter((g) => g !== GESTURES.NONE)
-  const commandOptions = Object.values(COMMANDS)
+  const isBrowse = editingMode === 'browse'
+  const commandOptions = isBrowse ? BROWSE_COMMANDS : Object.values(COMMANDS)
+  const labels = isBrowse ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
 
   return (
     <>
@@ -956,7 +978,7 @@ function SettingsScreen() {
                 onChange={(e) => handleGestureChange(g, e.target.value)}
               >
                 {commandOptions.map((c) => (
-                  <option key={c} value={c}>{COMMAND_LABELS[c] ?? c}</option>
+                  <option key={c} value={c}>{labels[c] ?? COMMAND_LABELS[c] ?? c}</option>
                 ))}
               </select>
             </div>

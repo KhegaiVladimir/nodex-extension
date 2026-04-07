@@ -30,13 +30,15 @@ if (window.__nodexLoaded) {
 } else {
 window.__nodexLoaded = true
 
-const METRICS_SEND_INTERVAL = 3
+const METRICS_SEND_INTERVAL = 5
 const WATCHDOG_INTERVAL_MS = 3000
 const LANDMARK_TIMEOUT_MS  = 5000
 const MAX_RESTART_ATTEMPTS = 3
 const RESTART_COOLDOWN_MS  = 2000
-const FRAME_BUDGET_MS      = 38
+const FRAME_BUDGET_MS      = 20
 const INLINE_CALIBRATION_MS = 3000
+const URL_HISTORY_LIMIT     = 50
+const YT_ORIGIN             = 'https://www.youtube.com'
 
 class NodexContentScript {
   constructor() {
@@ -63,8 +65,10 @@ class NodexContentScript {
     this._contextValid        = true
     this._lastFrameProcessedAt = 0
     this._lastPath            = location.pathname
+    this._lastHref            = location.href
     this._navPollTimer        = null
     this._autoModeTimer       = null
+    this._urlHistory          = []
   }
 
   async init() {
@@ -260,8 +264,21 @@ class NodexContentScript {
     if (document.visibilityState === 'hidden') return
     if (cmd === COMMANDS.NONE) return
 
-    const controller = this._browseMode ? this._browseController : this._ytController
-    const applied = controller.execute(cmd)
+    let applied = false
+
+    if (cmd === COMMANDS.BACK || cmd === COMMANDS.PREV) {
+      this._safeGoBack()
+      applied = true
+    } else {
+      const controller = this._browseMode ? this._browseController : this._ytController
+      const result = controller.execute(cmd)
+      if (result === 'edge') {
+        this._hud?.showCommand(cmd, this._browseMode)
+        applied = false
+      } else {
+        applied = !!result
+      }
+    }
 
     if (applied) {
       this._hud?.showCommand(cmd, this._browseMode)
@@ -271,10 +288,19 @@ class NodexContentScript {
       type: MSG.COMMAND_EXECUTED,
       command: cmd,
       gesture,
-      applied,
+      applied: applied || false,
       metrics,
       browseMode: this._browseMode,
     })
+  }
+
+  _safeGoBack() {
+    if (this._urlHistory.length > 0) {
+      const prev = this._urlHistory.pop()
+      window.location.href = prev
+    } else {
+      window.location.href = YT_ORIGIN + '/'
+    }
   }
 
   _handleMetrics(metrics) {
@@ -299,10 +325,14 @@ class NodexContentScript {
         this.stop()
         break
 
+      case MSG.CALIBRATION_START:
+        this._gestureEngine?.updateSettings({ blocked: true })
+        break
+
       case MSG.SAVE_CALIBRATION:
         if (message.baseline) {
           saveCalibration(message.baseline)
-            .then(() => this._gestureEngine?.updateSettings({ baseline: message.baseline }))
+            .then(() => this._gestureEngine?.updateSettings({ baseline: message.baseline, blocked: false }))
             .catch(console.error)
         }
         break
@@ -354,22 +384,29 @@ class NodexContentScript {
 
     const frames = []
     const started = Date.now()
+    let finishScheduled = false
 
     const originalOnMetrics = this._gestureEngine._onMetrics
     this._gestureEngine._onMetrics = (metrics) => {
       frames.push(metrics)
       originalOnMetrics?.(metrics)
 
-      if (Date.now() - started >= INLINE_CALIBRATION_MS && frames.length > 0) {
+      if (
+        !finishScheduled &&
+        Date.now() - started >= INLINE_CALIBRATION_MS &&
+        frames.length > 0
+      ) {
+        finishScheduled = true
         this._gestureEngine._onMetrics = originalOnMetrics
         this._finishInlineCalibration(frames)
       }
     }
 
     setTimeout(() => {
-      if (!this._calibrating) return
+      if (!this._calibrating || finishScheduled) return
       this._gestureEngine._onMetrics = originalOnMetrics
       if (frames.length > 0) {
+        finishScheduled = true
         this._finishInlineCalibration(frames)
       } else {
         this._calibrating = false
@@ -381,6 +418,13 @@ class NodexContentScript {
 
   async _finishInlineCalibration(frames) {
     if (!this._calibrating) return
+    if (!frames?.length) {
+      this._calibrating = false
+      this._gestureEngine?.updateSettings({ blocked: false })
+      return
+    }
+    this._calibrating = false
+
     const baseline = {
       yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
       pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
@@ -388,9 +432,14 @@ class NodexContentScript {
       ear:   frames.reduce((s, f) => s + (f.ear ?? 0), 0) / frames.length,
     }
 
-    await saveCalibration(baseline).catch(console.error)
-    this._gestureEngine?.updateSettings({ baseline, blocked: false })
-    this._calibrating = false
+    try {
+      await saveCalibration(baseline)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      this._gestureEngine?.updateSettings({ baseline, blocked: false })
+    }
+
     this._hud?.showCommand('CALIBRATED')
 
     this._sendToSidePanel({
@@ -405,7 +454,14 @@ class NodexContentScript {
     const onNavigate = () => {
       const currentPath = location.pathname
       if (this._lastPath === currentPath) return
+
+      this._urlHistory.push(this._lastHref)
+      if (this._urlHistory.length > URL_HISTORY_LIMIT) {
+        this._urlHistory.splice(0, this._urlHistory.length - URL_HISTORY_LIMIT)
+      }
       this._lastPath = currentPath
+      this._lastHref = location.href
+
       if (!this._running) return
 
       this._manualModeOverride = false

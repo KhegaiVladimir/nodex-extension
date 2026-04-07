@@ -38,15 +38,15 @@ export const DEFAULT_COOLDOWNS = {
 
 export const DEFAULT_THRESHOLDS = {
   yaw: 15,
-  pitch: 12,
+  pitch: 10,
   roll: 15,
   earClose: 0.22,
   mouthOpen: 0.55,
   hysteresis: 3,
 }
 
-export const EYE_CLOSE_MIN_MS   = 250
-export const EYE_CLOSE_MAX_MS   = 700
+export const EYE_CLOSE_MIN_MS   = 450
+export const EYE_CLOSE_MAX_MS   = 900
 export const LONG_BLINK_MAX_MS  = 1500
 
 export const CALIBRATION_BLINK_MIN_MS = 1500
@@ -55,7 +55,7 @@ export const CALIBRATION_BLINK_MAX_MS = 3000
 export const SENSITIVITY_PRESETS = {
   low: {
     yaw: 19,
-    pitch: 15,
+    pitch: 13,
     roll: 18,
     earClose: 0.16,
     mouthOpen: 0.62,

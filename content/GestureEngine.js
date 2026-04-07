@@ -66,7 +66,11 @@ export class GestureEngine {
     const metrics = { yaw, pitch, roll, ear, mouth }
     this._onMetrics?.(metrics)
 
-    if (this._blocked) return
+    if (this._blocked) {
+      this._eyeCloseStart = null
+      this._active = GESTURES.NONE
+      return
+    }
 
     // --- Eye-close timing: fire on eyes OPEN based on closed duration ---
     const earThreshold = (bl?.ear > 0) ? bl.ear * 0.75 : T.earClose
@@ -149,10 +153,11 @@ export class GestureEngine {
   }
 
   _detect(yaw, pitch, roll, mouth, T) {
+    const absYaw = Math.abs(yaw), absPitch = Math.abs(pitch)
+    if (absPitch > absYaw && pitch >  T.pitch)  return GESTURES.HEAD_UP
+    if (absPitch > absYaw && pitch < -T.pitch)  return GESTURES.HEAD_DOWN
     if (yaw   < -T.yaw)       return GESTURES.HEAD_LEFT
     if (yaw   >  T.yaw)       return GESTURES.HEAD_RIGHT
-    if (pitch >  T.pitch)     return GESTURES.HEAD_UP
-    if (pitch < -T.pitch)     return GESTURES.HEAD_DOWN
     if (roll  < -T.roll)      return GESTURES.TILT_LEFT
     if (roll  >  T.roll)      return GESTURES.TILT_RIGHT
     if (mouth >  T.mouthOpen) return GESTURES.MOUTH_OPEN
