@@ -135,8 +135,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 })
 
 async function getActiveYouTubeTabId() {
-  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
-  if (tabs.length > 0) return tabs[0].id
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  return tab?.id ?? null
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
+    if (tabs.length > 0) return tabs[0].id
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    return tab?.id ?? null
+  } catch (_e) {
+    return null
+  }
 }

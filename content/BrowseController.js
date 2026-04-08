@@ -1,11 +1,14 @@
 import { COMMANDS } from '../shared/constants/commands.js'
 
 /**
- * Главная YouTube отдаётся с сервера почти без сетки — фид строится в браузере (custom elements
- * ytd-rich-grid-renderer → ytd-rich-grid-row → ytd-rich-item-renderer → a#thumbnail).
- * Селекторы ниже соответствуют этой модели; «пустые» ячейки сетки помечаются is-empty.
+ * YouTube home is served with almost no grid from the server — the feed is built in the browser
+ * (custom elements ytd-rich-grid-renderer → ytd-rich-grid-row → ytd-rich-item-renderer → a#thumbnail).
+ * Selectors below match that model; empty grid cells are marked is-empty.
  */
 const PRIMARY_SELECTORS = [
+  // New YouTube layout (2025+): yt-lockup-view-model on home, search, subscriptions
+  'yt-lockup-view-model a.yt-lockup-view-model__content-image',
+  // Legacy layout (if YouTube rolls back / on other pages):
   'ytd-rich-item-renderer a#thumbnail',
   'ytd-video-renderer a#thumbnail',
   'ytd-compact-video-renderer a#thumbnail',
@@ -18,10 +21,14 @@ const PRIMARY_SELECTORS = [
 const FALLBACK_SELECTOR = 'a[href*="/watch?v="], a[href^="/shorts/"], a[href*="youtube.com/shorts/"]'
 /** Geometric row break for thumbnails not under a known DOM row container. */
 const ROW_BREAK_PX = 48
+/** Row sort: treat rows within this vertical gap as one band, tie-break by min left. */
+const ROW_SORT_TOL_PX = 8
+/** Second vertical in same direction within this window skips entering / chains past shelf (see _moveFocusVertical). */
+const VERTICAL_SKIP_MS = 1500
 const MUTATION_DEBOUNCE_MS = 800
 const SCROLL_TRACK_MS = 400
-const PERIODIC_SCAN_MS = 2500
-/** Минимум между browse-командами движения (жесты не должны давать двойной шаг). */
+const PERIODIC_SCAN_MS = 5000
+/** Minimum gap between browse movement commands (gestures must not double-step). */
 const BROWSE_COMMAND_COOLDOWN_MS = 700
 
 const OBSERVER_ROOT_SELECTORS = [
@@ -30,7 +37,7 @@ const OBSERVER_ROOT_SELECTORS = [
   'ytd-watch-next-secondary-results-renderer',
 ]
 
-/** watch / embed / short URLs — для dedupe на главной и в полках */
+/** watch / embed / short URLs — for dedupe on home and in shelves */
 function videoIdFromHref(href) {
   if (!href || typeof href !== 'string') return null
   let m = href.match(/[?&]v=([^&]+)/)
@@ -111,70 +118,84 @@ function minTopInRow(row, rects) {
   return m === Infinity ? 0 : m
 }
 
-/** Rows for items without a DOM row root (sorted by top, then left). */
-function buildGeometricRows(items, rects, rowBreakPx) {
-  if (items.length === 0) return []
-
-  const rows = []
-  let currentRow = [items[0]]
-  let anchorTop = rects.get(items[0])?.top ?? 0
-  let rowMaxTop = anchorTop
-
-  for (let i = 1; i < items.length; i++) {
-    const item = items[i]
-    const top = rects.get(item)?.top ?? anchorTop
-    rowMaxTop = Math.max(rowMaxTop, top)
-    const breakLine = Math.max(anchorTop + rowBreakPx, rowMaxTop + 16)
-    if (top > breakLine) {
-      currentRow.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
-      rows.push(currentRow)
-      currentRow = [item]
-      anchorTop = top
-      rowMaxTop = top
-    } else {
-      currentRow.push(item)
-    }
+function minLeftInRow(row, rects) {
+  let m = Infinity
+  for (const el of row) {
+    const l = rects.get(el)?.left
+    if (typeof l === 'number' && l < m) m = l
   }
-  currentRow.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
-  rows.push(currentRow)
-  return rows
+  return m === Infinity ? 0 : m
+}
+
+function compareRowsByVisualOrder(a, b, rects) {
+  const minTopA = minTopInRow(a, rects)
+  const minTopB = minTopInRow(b, rects)
+  if (Math.abs(minTopA - minTopB) >= ROW_SORT_TOL_PX) return minTopA - minTopB
+  return minLeftInRow(a, rects) - minLeftInRow(b, rects)
+}
+
+function isShelfRow(row) {
+  const el = row[0]
+  if (!el?.closest) return false
+  return Boolean(el.closest('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer'))
 }
 
 /**
- * DOM-backed rows (grid row / shelf) plus geometric clusters for the rest.
- * Rows are ordered by minimum top.
+ * Build visual rows for YouTube home grid:
+ * - shelves stay as dedicated DOM rows
+ * - non-shelf cards are grouped by rounded top bands (stable against small top jitter)
  */
-function buildRows(items, rects, rowBreakPx) {
-  const domMap = new Map()
-  const noDom = []
+function buildRows(items, rects, _rowBreakPx) {
+  if (items.length === 0) return []
+
+  const shelfMap = new Map()
+  const flat = []
 
   for (const el of items) {
-    const root = getDomRowRoot(el)
-    if (root) {
-      if (!domMap.has(root)) domMap.set(root, [])
-      domMap.get(root).push(el)
+    const shelf = el.closest?.('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer')
+    if (shelf) {
+      if (!shelfMap.has(shelf)) shelfMap.set(shelf, [])
+      shelfMap.get(shelf).push(el)
     } else {
-      noDom.push(el)
+      flat.push(el)
     }
   }
 
-  const domRows = []
-  for (const rowItems of domMap.values()) {
-    rowItems.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
-    domRows.push(rowItems)
+  let rowStep = 200
+  if (flat.length > 0) {
+    const heights = flat
+      .map((el) => rects.get(el)?.height ?? 0)
+      .filter((h) => h > 40)
+      .sort((a, b) => a - b)
+    if (heights.length > 0) {
+      const median = heights[Math.floor(heights.length / 2)]
+      rowStep = Math.max(120, median * 0.5)
+    }
   }
 
-  noDom.sort((a, b) => {
-    const ar = rects.get(a) ?? { top: 0, left: 0 }
-    const br = rects.get(b) ?? { top: 0, left: 0 }
-    const dt = ar.top - br.top
-    if (Math.abs(dt) < 0.5) return ar.left - br.left
-    return dt
-  })
+  const flatRowMap = new Map()
+  for (const el of flat) {
+    const top = rects.get(el)?.top ?? 0
+    const key = Math.round(top / rowStep)
+    if (!flatRowMap.has(key)) flatRowMap.set(key, [])
+    flatRowMap.get(key).push(el)
+  }
 
-  const geoRows = buildGeometricRows(noDom, rects, rowBreakPx)
-  const allRows = [...domRows, ...geoRows]
-  allRows.sort((a, b) => minTopInRow(a, rects) - minTopInRow(b, rects))
+  const flatRows = [...flatRowMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, rowItems]) => {
+      rowItems.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
+      return rowItems
+    })
+
+  const shelfRows = []
+  for (const rowItems of shelfMap.values()) {
+    rowItems.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
+    shelfRows.push(rowItems)
+  }
+
+  const allRows = [...flatRows, ...shelfRows]
+  allRows.sort((a, b) => compareRowsByVisualOrder(a, b, rects))
   return allRows
 }
 
@@ -196,6 +217,8 @@ export class BrowseController {
     this._itemListSignature = null
     this._mutationDebounce = null
     this._onScroll = this._handleScroll.bind(this)
+    this._lastVerticalCmdAt = 0
+    this._lastVerticalDirection = 0
   }
 
   activate() {
@@ -217,6 +240,7 @@ export class BrowseController {
     window.addEventListener('scroll', this._onScroll, { passive: true })
 
     this._periodicTimer = setInterval(() => {
+      if (performance.now() - this._lastCommandAt < 1500) return
       this._scanItems()
       if (this._focusIndex < 0 && this._currentItems.length > 0) {
         this._focusFirstVisible()
@@ -253,6 +277,8 @@ export class BrowseController {
     this._lastCommandAt = 0
     this._focusedHref = null
     this._itemListSignature = null
+    this._lastVerticalCmdAt = 0
+    this._lastVerticalDirection = 0
   }
 
   /**
@@ -285,7 +311,15 @@ export class BrowseController {
 
   _ensureItems() {
     const focused = this._currentItems[this._focusIndex]
-    if (focused?.isConnected) return true
+    if (focused?.isConnected) {
+      const r = focused.getBoundingClientRect()
+      const vpH = window.innerHeight
+      if (r.bottom < 0 || r.top > vpH) {
+        this._scanItems()
+        if (this._currentItems.length > 0) this._focusFirstVisible()
+      }
+      return this._currentItems.length > 0
+    }
 
     this._scanItems()
     if (this._currentItems.length === 0) return false
@@ -317,15 +351,30 @@ export class BrowseController {
   _focusFirstVisible() {
     if (this._currentItems.length === 0) return
     const vpH = window.innerHeight
+    const tol = ROW_SORT_TOL_PX
+    let bestIdx = -1
+    let bestRect = null
+
+    const isBetterVisible = (r, br) => {
+      const dt = r.top - br.top
+      if (Math.abs(dt) >= tol) return r.top < br.top
+      return r.left < br.left
+    }
 
     for (let i = 0; i < this._currentItems.length; i++) {
       const el = this._currentItems[i]
       if (!el.isConnected) continue
       const r = el.getBoundingClientRect()
-      if (r.bottom > 0 && r.top < vpH && r.height > 0) {
-        this._setFocus(i)
-        return
+      if (r.bottom <= 0 || r.top >= vpH || r.height <= 0) continue
+      if (bestRect === null || isBetterVisible(r, bestRect)) {
+        bestIdx = i
+        bestRect = r
       }
+    }
+
+    if (bestIdx >= 0) {
+      this._setFocus(bestIdx)
+      return
     }
 
     this._setFocus(0)
@@ -359,7 +408,7 @@ export class BrowseController {
           if (el.closest('ytd-playlist-renderer, #masthead')) return false
           if (el.href?.includes('&list=')) return false
           const r = el.getBoundingClientRect()
-          return r.width >= 100 && r.height >= 60
+          return r.width >= 150 && r.height >= 100
         })
     }
 
@@ -380,14 +429,8 @@ export class BrowseController {
     }
 
     items = dedupeThumbnails(items, rects)
-
-    items.sort((a, b) => {
-      const ar = rects.get(a) ?? { top: 0, left: 0 }
-      const br = rects.get(b) ?? { top: 0, left: 0 }
-      const dt = ar.top - br.top
-      if (Math.abs(dt) < 0.5) return ar.left - br.left
-      return dt
-    })
+    this._rows = buildRows(items, rects, ROW_BREAK_PX)
+    items = this._rows.flat()
 
     const nextSig = {
       count: items.length,
@@ -405,16 +448,13 @@ export class BrowseController {
     }
     this._itemListSignature = nextSig
 
-    this._rows = buildRows(items, rects, ROW_BREAK_PX)
-    items = this._rows.flat()
     this._currentItems = items
 
     if (this._focusedHref) {
       const byHref = items.findIndex((el) => hrefMatchesFocus(this._focusedHref, el.href))
       if (byHref >= 0) {
-        this._focusIndex = byHref
-        this._focusedElement = items[byHref]
-        this._highlightItem(byHref)
+        this._setFocus(byHref)
+        this._ensureFocusInViewport()
         return
       }
     }
@@ -423,9 +463,8 @@ export class BrowseController {
     if (prevFocused && prevFocused.isConnected) {
       const newIdx = items.indexOf(prevFocused)
       if (newIdx >= 0) {
-        this._focusIndex = newIdx
-        this._focusedElement = prevFocused
-        this._highlightItem(this._focusIndex)
+        this._setFocus(newIdx)
+        this._ensureFocusInViewport()
         return
       }
     }
@@ -443,12 +482,23 @@ export class BrowseController {
       this._focusIndex < items.length &&
       items[this._focusIndex]?.isConnected
     ) {
-      this._focusedElement = items[this._focusIndex]
-      this._highlightItem(this._focusIndex)
+      this._setFocus(this._focusIndex)
+      this._ensureFocusInViewport()
       return
     }
 
     if (items.length > 0) this._focusFirstVisible()
+  }
+
+  _ensureFocusInViewport() {
+    if (this._focusIndex < 0) return
+    const el = this._currentItems[this._focusIndex]
+    if (!el?.isConnected) return
+    const r = el.getBoundingClientRect()
+    const vpH = window.innerHeight
+    if (r.bottom < 0 || r.top > vpH) {
+      this._focusFirstVisible()
+    }
   }
 
   _queryVisibleItems(selector) {
@@ -459,7 +509,27 @@ export class BrowseController {
   }
 
   _findRowCol() {
-    if (this._focusIndex < 0) return null
+    let synced = false
+
+    if (this._focusedElement?.isConnected) {
+      const idx = this._currentItems.indexOf(this._focusedElement)
+      if (idx >= 0) {
+        this._focusIndex = idx
+        synced = true
+      }
+    }
+
+    if (!synced && this._focusedHref) {
+      const idx = this._currentItems.findIndex((e) => hrefMatchesFocus(this._focusedHref, e.href))
+      if (idx >= 0) {
+        this._focusIndex = idx
+        this._focusedElement = this._currentItems[idx]
+        synced = true
+      }
+    }
+
+    if (!synced) return null
+
     const el = this._currentItems[this._focusIndex]
     if (!el) return null
     for (let r = 0; r < this._rows.length; r++) {
@@ -469,7 +539,7 @@ export class BrowseController {
     return null
   }
 
-  _moveFocus(delta) {
+  _moveFocus(delta, shelfScrollAttempt = 0) {
     if (this._rows.length === 0 || this._currentItems.length === 0) return false
 
     let rc = this._findRowCol()
@@ -481,8 +551,26 @@ export class BrowseController {
 
     const { rowIdx, colIdx } = rc
     const row = this._rows[rowIdx]
+    const current = this._currentItems[this._focusIndex]
     const newCol = colIdx + delta
-    if (newCol < 0 || newCol >= row.length) return 'edge'
+    if (newCol < 0 || newCol >= row.length) {
+      const shelf = current?.closest?.('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer')
+      if (shelf && shelfScrollAttempt < 1) {
+        const container =
+          shelf.querySelector('#scroll-container') ??
+          shelf.querySelector('[class*="scroll-container"]')
+        if (container) {
+          const dir = delta > 0 ? 1 : -1
+          container.scrollBy({ left: dir * 300, behavior: 'smooth' })
+          setTimeout(() => {
+            this._scanItems()
+            this._moveFocus(delta, shelfScrollAttempt + 1)
+          }, 500)
+          return true
+        }
+      }
+      return 'edge'
+    }
 
     const target = row[newCol]
     if (!target?.isConnected) {
@@ -495,12 +583,20 @@ export class BrowseController {
     if (newIdx < 0) return 'edge'
 
     this._setFocus(newIdx)
-    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    const r = target.getBoundingClientRect()
+    const fullyVisible =
+      r.top >= 0 &&
+      r.bottom <= window.innerHeight &&
+      r.left >= 0 &&
+      r.right <= window.innerWidth
+    if (!fullyVisible) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    }
     this._trackScrollPosition()
     return true
   }
 
-  _moveFocusVertical(direction) {
+  _moveFocusVertical(direction, scrollDepth = 0) {
     if (this._rows.length === 0 || this._focusIndex < 0) return false
 
     const current = this._currentItems[this._focusIndex]
@@ -517,35 +613,106 @@ export class BrowseController {
     }
     if (curRowIdx < 0) return false
 
-    const targetRowIdx = curRowIdx + direction
-    if (targetRowIdx < 0 || targetRowIdx >= this._rows.length) return 'edge'
-
     const rect = current.getBoundingClientRect()
     const centerX = rect.left + rect.width / 2
-    const targetRow = this._rows[targetRowIdx]
+    const now = performance.now()
+    const inShelf = Boolean(
+      current.closest('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer'),
+    )
 
-    let closest = null, closestDist = Infinity
-    for (const item of targetRow) {
-      if (!item.isConnected) continue
-      const ir = item.getBoundingClientRect()
-      const dist = Math.abs(ir.left + ir.width / 2 - centerX)
-      if (dist < closestDist) { closestDist = dist; closest = item }
+    const findNearestNonShelfIdx = (fromIdx, dir) => {
+      for (let i = fromIdx + dir; i >= 0 && i < this._rows.length; i += dir) {
+        if (!isShelfRow(this._rows[i])) return i
+      }
+      return -1
     }
 
+    const pickClosestInRow = (rowIdx) => {
+      const targetRow = this._rows[rowIdx]
+      let closest = null
+      let closestDist = Infinity
+      for (const item of targetRow) {
+        if (!item.isConnected) continue
+        const ir = item.getBoundingClientRect()
+        const dist = Math.abs(ir.left + ir.width / 2 - centerX)
+        if (dist < closestDist) {
+          closestDist = dist
+          closest = item
+        }
+      }
+      return closest
+    }
+
+    const applyVerticalFocus = (targetEl) => {
+      const newIdx = this._currentItems.indexOf(targetEl)
+      if (newIdx < 0) return false
+      this._setFocus(newIdx)
+      const r = targetEl.getBoundingClientRect()
+      const vpH = window.innerHeight
+      const vpW = window.innerWidth
+      const fullyVisible =
+        r.top >= 0 && r.bottom <= vpH && r.left >= 0 && r.right <= vpW
+      if (!fullyVisible) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      this._trackScrollPosition()
+      this._lastVerticalCmdAt = now
+      this._lastVerticalDirection = direction
+      return true
+    }
+
+    const tryPageScrollRetry = () => {
+      if (scrollDepth >= 1) return false
+      window.scrollBy({ top: direction * 600, behavior: 'smooth' })
+      setTimeout(() => {
+        this._scanItems()
+        this._moveFocusVertical(direction, scrollDepth + 1)
+      }, 700)
+      return true
+    }
+
+    if (inShelf) {
+      const targetRowIdx = findNearestNonShelfIdx(curRowIdx, direction)
+      if (targetRowIdx < 0) {
+        return tryPageScrollRetry() ? true : 'edge'
+      }
+      const closest = pickClosestInRow(targetRowIdx)
+      if (!closest) return 'edge'
+      return applyVerticalFocus(closest) ? true : 'edge'
+    }
+
+    let t = curRowIdx + direction
+    if (t < 0 || t >= this._rows.length) {
+      return tryPageScrollRetry() ? true : 'edge'
+    }
+
+    if (isShelfRow(this._rows[t])) {
+      const skipEnter =
+        this._lastVerticalDirection === direction &&
+        now - this._lastVerticalCmdAt < VERTICAL_SKIP_MS
+      if (skipEnter) {
+        while (t >= 0 && t < this._rows.length && isShelfRow(this._rows[t])) {
+          t += direction
+        }
+        if (t < 0 || t >= this._rows.length) {
+          return tryPageScrollRetry() ? true : 'edge'
+        }
+      } else {
+        const closest = pickClosestInRow(t)
+        if (!closest) return 'edge'
+        return applyVerticalFocus(closest) ? true : 'edge'
+      }
+    }
+
+    const closest = pickClosestInRow(t)
     if (!closest) return 'edge'
-
-    const newIdx = this._currentItems.indexOf(closest)
-    if (newIdx < 0) return 'edge'
-
-    this._setFocus(newIdx)
-    closest.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    this._trackScrollPosition()
-    return true
+    return applyVerticalFocus(closest) ? true : 'edge'
   }
 
   _setFocus(index) {
     this._focusIndex = index
     this._focusedElement = this._currentItems[index] ?? null
+    this._focusedHref = this._focusedElement?.href ?? null
     this._highlightItem(index)
   }
 
@@ -569,7 +736,6 @@ export class BrowseController {
       width: `${rect.width + 8}px`,
       height: `${rect.height + 8}px`,
     })
-    if (el.href) this._focusedHref = el.href
   }
 
   _trackScrollPosition() {

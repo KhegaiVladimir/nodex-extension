@@ -200,7 +200,7 @@ class NodexContentScript {
 
     if (e.data?.type === 'NODEX_BRIDGE_ERROR') {
       console.error('[Nodex] Bridge error:', e.data.error)
-      this._hud?.showWarning('Ошибка камеры: ' + (e.data.error ?? 'неизвестно'))
+      this._hud?.showWarning('Camera error: ' + (e.data.error ?? 'unknown'))
     }
 
     if (e.data?.type === 'NODEX_INJECT_MEDIAPIPE') {
@@ -379,7 +379,7 @@ class NodexContentScript {
     if (this._calibrating) return
     this._calibrating = true
 
-    this._hud?.showWarning('Калибровка... Смотрите прямо (3 сек)')
+    this._hud?.showWarning('Calibrating… Look straight ahead (3 sec)')
     this._gestureEngine?.updateSettings({ blocked: true })
 
     const frames = []
@@ -411,7 +411,7 @@ class NodexContentScript {
       } else {
         this._calibrating = false
         this._gestureEngine?.updateSettings({ blocked: false })
-        this._hud?.showWarning('Калибровка не удалась')
+        this._hud?.showWarning('Calibration failed')
       }
     }, INLINE_CALIBRATION_MS + 2000)
   }
@@ -516,7 +516,7 @@ class NodexContentScript {
     this._restartAttempts++
 
     if (this._restartAttempts > MAX_RESTART_ATTEMPTS) {
-      this._hud?.showWarning('Камера потеряна. Перезагрузите страницу.')
+      this._hud?.showWarning('Camera lost. Reload the page.')
       this.stop()
       this._sendToSidePanel({
         type: MSG.ENGINE_STATUS,
@@ -530,7 +530,7 @@ class NodexContentScript {
       `[Nodex] Watchdog: no landmarks for ${elapsed}ms, restarting bridge ` +
       `(attempt ${this._restartAttempts}/${MAX_RESTART_ATTEMPTS})`,
     )
-    this._hud?.showWarning('Переподключение камеры...')
+    this._hud?.showWarning('Reconnecting camera…')
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
     this._lastLandmarkTime = Date.now()
     setTimeout(() => {
@@ -544,7 +544,7 @@ class NodexContentScript {
 
   _handleContextInvalidated() {
     this._contextValid = false
-    this._hud?.showWarning('Расширение обновлено. Перезагрузите страницу.')
+    this._hud?.showWarning('Extension updated. Reload the page.')
     this._stopWatchdog()
   }
 

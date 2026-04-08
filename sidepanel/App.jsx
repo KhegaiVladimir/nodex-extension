@@ -39,39 +39,39 @@ async function sendToContent(payload) {
 }
 
 const GESTURE_LABELS = {
-  [GESTURES.HEAD_LEFT]:   '← Голова влево',
-  [GESTURES.HEAD_RIGHT]:  '→ Голова вправо',
-  [GESTURES.HEAD_UP]:     '↑ Голова вверх',
-  [GESTURES.HEAD_DOWN]:   '↓ Голова вниз',
-  [GESTURES.TILT_LEFT]:   '↰ Наклон влево',
-  [GESTURES.TILT_RIGHT]:  '↱ Наклон вправо',
-  [GESTURES.EYES_CLOSED]: '👁 Глаза закрыты',
-  [GESTURES.MOUTH_OPEN]:  '👄 Рот открыт',
+  [GESTURES.HEAD_LEFT]:   '← Head Left',
+  [GESTURES.HEAD_RIGHT]:  '→ Head Right',
+  [GESTURES.HEAD_UP]:     '↑ Head Up',
+  [GESTURES.HEAD_DOWN]:   '↓ Head Down',
+  [GESTURES.TILT_LEFT]:   '↰ Tilt Left',
+  [GESTURES.TILT_RIGHT]:  '↱ Tilt Right',
+  [GESTURES.EYES_CLOSED]: '👁 Eyes Closed',
+  [GESTURES.MOUTH_OPEN]:  '👄 Mouth Open',
 }
 
 const COMMAND_LABELS = {
-  [COMMANDS.PLAY]:       '▶ Играть',
-  [COMMANDS.PAUSE]:      '⏸ Пауза',
-  [COMMANDS.PLAY_PAUSE]: '⏯ Плей/Пауза',
-  [COMMANDS.VOL_UP]:     '🔊 Громче',
-  [COMMANDS.VOL_DOWN]:   '🔉 Тише',
-  [COMMANDS.MUTE]:       '🔇 Без звука',
-  [COMMANDS.REWIND]:     '⏪ Назад',
-  [COMMANDS.SKIP]:       '⏩ Вперёд',
-  [COMMANDS.NEXT]:       '⏭ Следующее',
-  [COMMANDS.PREV]:       '⏮ Предыдущее',
-  [COMMANDS.BACK]:       '↩ Назад',
-  [COMMANDS.NONE]:       '— Нет',
+  [COMMANDS.PLAY]:       '▶ Play',
+  [COMMANDS.PAUSE]:      '⏸ Pause',
+  [COMMANDS.PLAY_PAUSE]: '⏯ Play/Pause',
+  [COMMANDS.VOL_UP]:     '🔊 Volume Up',
+  [COMMANDS.VOL_DOWN]:   '🔉 Volume Down',
+  [COMMANDS.MUTE]:       '🔇 Mute',
+  [COMMANDS.REWIND]:     '⏪ Rewind',
+  [COMMANDS.SKIP]:       '⏩ Skip',
+  [COMMANDS.NEXT]:       '⏭ Next',
+  [COMMANDS.PREV]:       '⏮ Previous',
+  [COMMANDS.BACK]:       '↩ Back',
+  [COMMANDS.NONE]:       '— None',
 }
 
 const BROWSE_COMMAND_LABELS = {
-  [COMMANDS.REWIND]:     '← Влево',
-  [COMMANDS.SKIP]:       '→ Вправо',
-  [COMMANDS.VOL_UP]:     '↑ Вверх',
-  [COMMANDS.VOL_DOWN]:   '↓ Вниз',
-  [COMMANDS.PLAY_PAUSE]: '✓ Выбрать',
-  [COMMANDS.BACK]:       '↩ Назад',
-  [COMMANDS.NONE]:       '— Нет',
+  [COMMANDS.REWIND]:     '← Left',
+  [COMMANDS.SKIP]:       '→ Right',
+  [COMMANDS.VOL_UP]:     '↑ Up',
+  [COMMANDS.VOL_DOWN]:   '↓ Down',
+  [COMMANDS.PLAY_PAUSE]: '✓ Select',
+  [COMMANDS.BACK]:       '↩ Back',
+  [COMMANDS.NONE]:       '— None',
 }
 
 const BROWSE_COMMANDS = [
@@ -84,10 +84,10 @@ const CALIBRATION_DURATION_MS = 3000
 const CALIBRATION_FPS = 15
 
 const TUTORIAL_GESTURES = [
-  { label: 'Поверните голову влево',       gesture: GESTURES.HEAD_LEFT },
-  { label: 'Поверните голову вправо',      gesture: GESTURES.HEAD_RIGHT },
-  { label: 'Поднимите голову вверх',       gesture: GESTURES.HEAD_UP },
-  { label: 'Закройте глаза на 0.5 сек',   gesture: GESTURES.EYES_CLOSED },
+  { label: 'Turn your head left',       gesture: GESTURES.HEAD_LEFT },
+  { label: 'Turn your head right',      gesture: GESTURES.HEAD_RIGHT },
+  { label: 'Tilt your head up',       gesture: GESTURES.HEAD_UP },
+  { label: 'Close your eyes for 0.5s',   gesture: GESTURES.EYES_CLOSED },
 ]
 
 /* ── styles ── */
@@ -336,7 +336,7 @@ function useCalibration() {
 
       const frames = framesRef.current
       if (frames.length === 0) {
-        setError('Нет кадров для калибровки.')
+        setError('No frames for calibration.')
         setPhase('idle')
         return
       }
@@ -353,7 +353,7 @@ function useCalibration() {
         await sendToContent({ type: MSG.SAVE_CALIBRATION, baseline })
         setPhase('done')
       } catch (err) {
-        setError(`Ошибка сохранения: ${err.message}`)
+        setError(`Save error: ${err.message}`)
         setPhase('idle')
       }
     }
@@ -378,7 +378,7 @@ function useCalibration() {
       if (framesRef.current.length > 0) finalize()
       else if (!doneRef.current) {
         setPhase('idle')
-        setError('Не получены метрики. Убедитесь, что движок запущен.')
+        setError('No metrics received. Make sure the engine is running.')
       }
     }, CALIBRATION_DURATION_MS + 1000)
   }, [])
@@ -458,7 +458,7 @@ export default function App() {
             }}
             onClick={() => setScreen(s)}
           >
-            {{ main: 'Главная', calibration: 'Калибровка', settings: 'Настройки' }[s]}
+            {{ main: 'Home', calibration: 'Calibration', settings: 'Settings' }[s]}
           </button>
         ))}
       </div>
@@ -504,14 +504,13 @@ function OnboardStep1({ onNext }) {
     <div style={S.onboardWrap}>
       <div style={S.onboardCard}>
         <h1 style={S.onboardTitle}>Nodex</h1>
-        <p style={S.onboardSub}>Управляй YouTube без рук</p>
+        <p style={S.onboardSub}>Control YouTube hands-free</p>
         <p style={S.onboardText}>
-          Nodex использует камеру для отслеживания движений головы и лица.
-          Поворот головы, наклон, закрытие глаз — всё превращается в команды
-          плеера.
+          Nodex uses your camera to track head and face movements.
+          Head turns, tilts, eye closure — all become player commands.
         </p>
         <button style={S.onboardBtn} onClick={onNext}>
-          Начать настройку →
+          Start setup →
         </button>
       </div>
     </div>
@@ -547,38 +546,38 @@ function OnboardStep2({ onNext }) {
   return (
     <div style={S.onboardWrap}>
       <div style={S.onboardCard}>
-        <h2 style={S.onboardHeading}>Камера</h2>
+        <h2 style={S.onboardHeading}>Camera</h2>
         <p style={S.onboardText}>
-          Откройте любое видео на YouTube и нажмите кнопку ниже.
+          Open any YouTube video and tap the button below.
         </p>
         <p style={S.onboardNote}>
-          Nodex запросит доступ к камере — это нужно для отслеживания жестов.
-          Видео с камеры не записывается и не передаётся.
+          Nodex will ask for camera access — needed for gesture tracking.
+          The camera feed is not recorded or transmitted.
         </p>
         <button
           style={{ ...S.onboardBtn, opacity: status === 'waiting' ? 0.6 : 1 }}
           onClick={handleStart}
           disabled={status === 'waiting' || status === 'success'}
         >
-          Запустить движок
+          Start engine
         </button>
 
         {status === 'waiting' && (
           <div style={S.onboardStatus}>
             <span style={S.onboardDot} />
-            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Запуск...</span>
+            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Starting…</span>
           </div>
         )}
         {status === 'success' && (
           <div style={S.onboardStatus}>
             <span style={{ ...S.onboardDot, background: '#4ade80' }} />
-            <span style={{ color: '#4ade80', fontSize: '12px' }}>Движок работает</span>
+            <span style={{ color: '#4ade80', fontSize: '12px' }}>Engine running</span>
           </div>
         )}
         {status === 'error' && (
           <div style={S.onboardStatus}>
             <span style={{ color: '#ef4444', fontSize: '12px' }}>
-              Ошибка: откройте видео на YouTube и попробуйте снова
+              Error: open a YouTube video and try again
             </span>
           </div>
         )}
@@ -613,9 +612,9 @@ function OnboardStep3({ onNext }) {
   return (
     <div style={S.onboardWrap}>
       <div style={S.onboardCard}>
-        <h2 style={S.onboardHeading}>Калибровка</h2>
+        <h2 style={S.onboardHeading}>Calibration</h2>
         <p style={S.onboardText}>
-          Смотрите прямо в камеру. Держите голову неподвижно.
+          Look straight into the camera. Keep your head still.
         </p>
 
         {liveMetrics && (
@@ -643,7 +642,7 @@ function OnboardStep3({ onNext }) {
               </p>
             )}
             <button style={S.onboardBtn} onClick={startCalibration}>
-              Начать калибровку (3 сек)
+              Start calibration (3 sec)
             </button>
           </>
         )}
@@ -651,7 +650,7 @@ function OnboardStep3({ onNext }) {
         {phase === 'capturing' && (
           <>
             <p style={{ color: 'var(--accent)', fontSize: '12px' }}>
-              Захват... Не двигайте головой.
+              Capturing… Keep your head still.
             </p>
             <div style={S.progressBar}>
               <div style={S.progressFill(progress)} />
@@ -664,7 +663,7 @@ function OnboardStep3({ onNext }) {
 
         {phase === 'done' && (
           <p style={{ color: '#4ade80', fontSize: '13px' }}>
-            Калибровка сохранена!
+            Calibration saved!
           </p>
         )}
       </div>
@@ -709,9 +708,9 @@ function OnboardStep4({ onComplete }) {
   return (
     <div style={S.onboardWrap}>
       <div style={S.onboardCard}>
-        <h2 style={S.onboardHeading}>Попробуйте жесты</h2>
+        <h2 style={S.onboardHeading}>Try the gestures</h2>
         <p style={S.onboardText}>
-          Выполните каждый жест — Nodex покажет, что распознал.
+          Perform each gesture — Nodex will show what it recognized.
         </p>
 
         {TUTORIAL_GESTURES.map(({ label, gesture }) => (
@@ -732,20 +731,20 @@ function OnboardStep4({ onComplete }) {
         {allDone && (
           <>
             <p style={{ color: 'var(--accent)', fontSize: '14px', fontWeight: 700, marginTop: '16px' }}>
-              Отлично! Всё работает.
+              Great! Everything works.
             </p>
             <button
               style={{ ...S.onboardBtn, marginTop: '12px' }}
               onClick={handleFinish}
             >
-              Перейти к Nodex →
+              Go to Nodex →
             </button>
           </>
         )}
 
         {showSkip && !allDone && (
           <button style={S.onboardSkip} onClick={handleFinish}>
-            Пропустить →
+            Skip →
           </button>
         )}
       </div>
@@ -768,7 +767,7 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
           <span style={S.status(running)} />
           <span style={{ fontWeight: 500 }}>
-            {running ? 'Движок работает' : 'Движок остановлен'}
+            {running ? 'Engine running' : 'Engine stopped'}
           </span>
         </div>
 
@@ -776,7 +775,7 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
           style={{ ...S.btn, ...(running ? S.btnSecondary : S.btnPrimary) }}
           onClick={handleToggle}
         >
-          {running ? 'Остановить' : 'Запустить'}
+          {running ? 'Stop' : 'Start'}
         </button>
 
         {running && (
@@ -792,14 +791,14 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
             onClick={onModeToggle}
             disabled={modeChanging}
           >
-            {browseMode ? '▶️ Плеер' : '🔍 Навигация'}
+            {browseMode ? '▶️ Player' : '🔍 Browse'}
           </button>
         )}
       </div>
 
       {lastCommand && (
         <div style={S.card}>
-          <div style={S.subheading}>Последняя команда</div>
+          <div style={S.subheading}>Last command</div>
           <div style={{ fontSize: '16px', color: 'var(--accent)' }}>
             {cmdLabels[lastCommand.command] ?? COMMAND_LABELS[lastCommand.command] ?? lastCommand.command}
           </div>
@@ -811,7 +810,7 @@ function MainScreen({ running, browseMode, modeChanging, onModeToggle, metrics, 
 
       {metrics && (
         <div style={S.card}>
-          <div style={S.subheading}>Метрики</div>
+          <div style={S.subheading}>Metrics</div>
           {[
             ['Yaw', metrics.yaw],
             ['Pitch', metrics.pitch],
@@ -839,13 +838,13 @@ function CalibrationScreen() {
 
   return (
     <div style={S.card}>
-      <div style={S.subheading}>Калибровка нейтральной позы</div>
+      <div style={S.subheading}>Neutral pose calibration</div>
 
       {phase === 'idle' && (
         <>
           <p style={{ color: 'var(--muted)', fontSize: '12px', marginBottom: '12px' }}>
-            Смотрите прямо в камеру и нажмите кнопку. Сохраняйте нейтральное
-            положение головы 3 секунды.
+            Look straight into the camera and tap the button. Hold a neutral head
+            pose for 3 seconds.
           </p>
           {error && (
             <p style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</p>
@@ -854,7 +853,7 @@ function CalibrationScreen() {
             style={{ ...S.btn, ...S.btnPrimary }}
             onClick={startCalibration}
           >
-            Начать калибровку
+            Start calibration
           </button>
         </>
       )}
@@ -862,7 +861,7 @@ function CalibrationScreen() {
       {phase === 'capturing' && (
         <>
           <p style={{ color: 'var(--accent)', fontSize: '12px' }}>
-            Захват... Не двигайте головой.
+            Capturing… Keep your head still.
           </p>
           <div style={S.progressBar}>
             <div style={S.progressFill(progress)} />
@@ -876,13 +875,13 @@ function CalibrationScreen() {
       {phase === 'done' && (
         <>
           <p style={{ color: '#4ade80', fontSize: '13px', marginBottom: '12px' }}>
-            Калибровка сохранена!
+            Calibration saved!
           </p>
           <button
             style={{ ...S.btn, ...S.btnSecondary }}
             onClick={reset}
           >
-            Повторить
+            Repeat
           </button>
         </>
       )}
@@ -953,19 +952,19 @@ function SettingsScreen() {
   return (
     <>
       <div style={S.card}>
-        <div style={S.subheading}>Маппинг жестов</div>
+        <div style={S.subheading}>Gesture mapping</div>
         <div style={{ ...S.nav, marginBottom: '10px' }}>
           <button
             style={{ ...S.navBtn, ...(editingMode === 'player' ? S.navBtnActive : {}) }}
             onClick={() => setEditingMode('player')}
           >
-            ▶ Плеер
+            ▶ Player
           </button>
           <button
             style={{ ...S.navBtn, ...(editingMode === 'browse' ? S.navBtnActive : {}) }}
             onClick={() => setEditingMode('browse')}
           >
-            🔍 Навигация
+            🔍 Browse
           </button>
         </div>
         {mappableGestures.map((g) => (
@@ -987,15 +986,15 @@ function SettingsScreen() {
       </div>
 
       <div style={S.card}>
-        <div style={S.subheading}>Чувствительность</div>
+        <div style={S.subheading}>Sensitivity</div>
         <select
           style={S.select}
           value={preset}
           onChange={handlePresetChange}
         >
-          <option value="low">Низкая — большие движения</option>
-          <option value="medium">Средняя (по умолчанию)</option>
-          <option value="high">Высокая — малые движения</option>
+          <option value="low">Low — large movements</option>
+          <option value="medium">Medium (default)</option>
+          <option value="high">High — small movements</option>
         </select>
       </div>
 
@@ -1003,7 +1002,7 @@ function SettingsScreen() {
         style={{ ...S.btn, ...S.btnPrimary, opacity: saved ? 0.6 : 1 }}
         onClick={handleSave}
       >
-        {saved ? 'Сохранено ✓' : 'Сохранить настройки'}
+        {saved ? 'Saved ✓' : 'Save settings'}
       </button>
     </>
   )

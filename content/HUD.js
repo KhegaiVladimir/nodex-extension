@@ -3,30 +3,30 @@ import { COMMANDS } from '../shared/constants/commands.js'
 const TOAST_DURATION_MS = 1500
 
 const COMMAND_LABELS = Object.freeze({
-  [COMMANDS.PLAY]:       '▶ Воспроизведение',
-  [COMMANDS.PAUSE]:      '⏸ Пауза',
-  [COMMANDS.PLAY_PAUSE]: '⏯ Плей / Пауза',
-  [COMMANDS.VOL_UP]:     '🔊 Громче',
-  [COMMANDS.VOL_DOWN]:   '🔉 Тише',
-  [COMMANDS.MUTE]:       '🔇 Без звука',
-  [COMMANDS.REWIND]:     '⏪ Назад',
-  [COMMANDS.SKIP]:       '⏩ Вперёд',
-  [COMMANDS.NEXT]:       '⏭ Следующее',
-  [COMMANDS.PREV]:       '⏮ Предыдущее',
-  [COMMANDS.BACK]:       '↩ Назад',
-  BROWSE_ON:             '🔍 Навигация',
-  BROWSE_OFF:            '▶️ Плеер',
-  NO_VIDEOS:             '⚠ Нет видео на странице',
-  CALIBRATED:            '✓ Калибровка сохранена',
+  [COMMANDS.PLAY]:       '▶ Play',
+  [COMMANDS.PAUSE]:      '⏸ Pause',
+  [COMMANDS.PLAY_PAUSE]: '⏯ Play/Pause',
+  [COMMANDS.VOL_UP]:     '🔊 Volume Up',
+  [COMMANDS.VOL_DOWN]:   '🔉 Volume Down',
+  [COMMANDS.MUTE]:       '🔇 Mute',
+  [COMMANDS.REWIND]:     '⏪ Rewind',
+  [COMMANDS.SKIP]:       '⏩ Skip',
+  [COMMANDS.NEXT]:       '⏭ Next',
+  [COMMANDS.PREV]:       '⏮ Previous',
+  [COMMANDS.BACK]:       '↩ Back',
+  BROWSE_ON:             '🔍 Browse',
+  BROWSE_OFF:            '▶️ Player',
+  NO_VIDEOS:             '⚠ No videos on this page',
+  CALIBRATED:            '✓ Calibration saved',
 })
 
 const BROWSE_COMMAND_LABELS = Object.freeze({
-  [COMMANDS.REWIND]:     '← Влево',
-  [COMMANDS.SKIP]:       '→ Вправо',
-  [COMMANDS.VOL_UP]:     '↑ Вверх',
-  [COMMANDS.VOL_DOWN]:   '↓ Вниз',
-  [COMMANDS.PLAY_PAUSE]: '✓ Выбрать',
-  [COMMANDS.BACK]:       '↩ Назад',
+  [COMMANDS.REWIND]:     '← Left',
+  [COMMANDS.SKIP]:       '→ Right',
+  [COMMANDS.VOL_UP]:     '↑ Up',
+  [COMMANDS.VOL_DOWN]:   '↓ Down',
+  [COMMANDS.PLAY_PAUSE]: '✓ Select',
+  [COMMANDS.BACK]:       '↩ Back',
 })
 
 const HUD_STYLES = /* css */ `
@@ -152,7 +152,7 @@ export class HUD {
 
     this._modeBadge = document.createElement('div')
     this._modeBadge.className = 'nodex-mode-badge'
-    this._modeBadge.textContent = '▶️ Плеер'
+    this._modeBadge.textContent = '▶️ Player'
 
     this._container.appendChild(this._modeBadge)
     this._container.appendChild(this._metrics)
@@ -187,7 +187,7 @@ export class HUD {
 
   setModeIndicator(browseMode) {
     if (!this._modeBadge) return
-    this._modeBadge.textContent = browseMode ? '🔍 Навигация' : '▶️ Плеер'
+    this._modeBadge.textContent = browseMode ? '🔍 Browse' : '▶️ Player'
     this._modeBadge.style.background = browseMode ? '#00e5ff' : ''
     this._modeBadge.style.color = browseMode ? '#0a0a0a' : ''
   }

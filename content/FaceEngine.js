@@ -125,7 +125,7 @@ export class FaceEngine {
   async _loadAsText(url) {
     const response = await fetch(url)
     if (!response.ok) {
-      throw new Error(`[Nodex] Не удалось загрузить: ${url}`)
+      throw new Error(`[Nodex] Failed to load: ${url}`)
     }
     return response.text()
   }
@@ -147,7 +147,7 @@ export class FaceEngine {
         } else if (Date.now() > deadline) {
           clearInterval(poll)
           reject(new Error(
-            `[Nodex] ${globalName} недоступен — проверь web_accessible_resources`,
+            `[Nodex] ${globalName} unavailable — check web_accessible_resources`,
           ))
         }
       }, POLL_INTERVAL_MS)
