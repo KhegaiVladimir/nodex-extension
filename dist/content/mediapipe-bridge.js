@@ -95,9 +95,13 @@
     })
     faceMesh.setOptions(FACE_MESH_OPTIONS)
     faceMesh.onResults((results) => {
-      if (!running) return
-      const lm = results.multiFaceLandmarks?.[0]
-      if (lm) window.postMessage({ type: 'NODEX_LANDMARKS', data: lm }, '*')
+      try {
+        if (!running) return
+        const lm = results.multiFaceLandmarks?.[0]
+        if (lm) window.postMessage({ type: 'NODEX_LANDMARKS', data: lm }, '*')
+      } catch (_e) {
+        /* skip malformed frame */
+      }
     })
 
     await faceMesh.initialize()
@@ -153,8 +157,18 @@
         await initMediaPipe()
         await startCamera()
       } catch (err) {
-        console.error('[Nodex Bridge] init failed:', err)
-        window.postMessage({ type: 'NODEX_BRIDGE_ERROR', error: err.message }, '*')
+        await stopCamera()
+        const name = err?.name || ''
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          window.postMessage({ type: 'NODEX_CAMERA_DENIED' }, '*')
+          return
+        }
+        console.error('[Nodex] Bridge init failed:', err)
+        const raw = err?.message || String(err)
+        const msg = /initialize|FaceMesh|fetch|load|wasm/i.test(raw)
+          ? 'Failed to load MediaPipe. Try reloading the page.'
+          : raw
+        window.postMessage({ type: 'NODEX_BRIDGE_ERROR', error: msg }, '*')
       }
     }
 

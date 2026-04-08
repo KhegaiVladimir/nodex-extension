@@ -28,17 +28,22 @@ export class YouTubeController {
   }
 
   _sendKey({ key, code, keyCode, shiftKey = false }) {
-    const target = document.querySelector('#movie_player') ?? document.body
-    const opts = {
-      key,
-      code,
-      keyCode,
-      which: keyCode,
-      shiftKey,
-      bubbles: true,
-      cancelable: true,
+    try {
+      const target = document.querySelector('#movie_player') ?? document.body
+      const opts = {
+        key,
+        code,
+        keyCode,
+        which: keyCode,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      }
+      target.dispatchEvent(new KeyboardEvent('keydown', opts))
+      return true
+    } catch (e) {
+      console.error('[Nodex] Keyboard dispatch failed:', e)
+      return false
     }
-    target.dispatchEvent(new KeyboardEvent('keydown', opts))
-    return true
   }
 }

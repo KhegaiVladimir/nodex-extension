@@ -1,7 +1,7 @@
 {
   "name": "Nodex",
   "version": "1.0.0",
-  "description": "Control YouTube playback and browsing with head gestures. Fully on-device, no data leaves your browser.",
+  "description": "Control YouTube hands-free with head gestures. Face tracking runs entirely on your device — no video leaves the browser.",
   "manifest_version": 3,
 
   "permissions": [
@@ -51,7 +51,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/mediapipe/*"
+        "assets/mediapipe/*",
+        "content/mediapipe-bridge.js"
       ],
       "matches": ["https://www.youtube.com/*"]
     }

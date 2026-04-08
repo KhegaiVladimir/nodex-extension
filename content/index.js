@@ -30,6 +30,18 @@ if (window.__nodexLoaded) {
 } else {
 window.__nodexLoaded = true
 
+/** @param {unknown} data */
+function isValidLandmarkBatch(data) {
+  if (!Array.isArray(data) || data.length !== 468) return false
+  for (let i = 0; i < data.length; i++) {
+    const p = data[i]
+    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || typeof p.z !== 'number') {
+      return false
+    }
+  }
+  return true
+}
+
 const METRICS_SEND_INTERVAL = 5
 const WATCHDOG_INTERVAL_MS = 3000
 const LANDMARK_TIMEOUT_MS  = 5000
@@ -189,6 +201,7 @@ class NodexContentScript {
 
     if (e.data?.type === 'NODEX_LANDMARKS') {
       if (!this._running || this._destroyed) return
+      if (!isValidLandmarkBatch(e.data.data)) return
       this._lastLandmarkTime = Date.now()
 
       const now = performance.now()
@@ -198,9 +211,25 @@ class NodexContentScript {
       this._gestureEngine?.processFrame(e.data.data)
     }
 
+    if (e.data?.type === 'NODEX_CAMERA_DENIED') {
+      this._running = false
+      this._stopWatchdog()
+      console.warn('[Nodex] Camera access denied')
+      this._hud?.showWarning(
+        'Camera access denied. Click the camera icon in the address bar to enable.',
+      )
+      void saveSettings({ engine_active: false }).catch(() => {})
+      this._sendStatus()
+      return
+    }
+
     if (e.data?.type === 'NODEX_BRIDGE_ERROR') {
       console.error('[Nodex] Bridge error:', e.data.error)
-      this._hud?.showWarning('Camera error: ' + (e.data.error ?? 'unknown'))
+      this._running = false
+      this._stopWatchdog()
+      this._hud?.showWarning(e.data.error ?? 'Unknown error')
+      void saveSettings({ engine_active: false }).catch(() => {})
+      this._sendStatus()
     }
 
     if (e.data?.type === 'NODEX_INJECT_MEDIAPIPE') {
@@ -435,7 +464,7 @@ class NodexContentScript {
     try {
       await saveCalibration(baseline)
     } catch (e) {
-      console.error(e)
+      console.error('[Nodex]', e)
     } finally {
       this._gestureEngine?.updateSettings({ baseline, blocked: false })
     }

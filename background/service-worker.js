@@ -3,9 +3,7 @@ const MSG_SIDEPANEL_TO_CONTENT = 'SIDEPANEL_TO_CONTENT'
 const MSG_REQUEST_STATUS       = 'REQUEST_STATUS'
 const MSG_INJECT_MEDIAPIPE     = 'INJECT_MEDIAPIPE'
 
-chrome.action.onClicked.addListener((tab) => {
-  chrome.sidePanel.open({ tabId: tab.id }).catch(() => {})
-})
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
 
 // Programmatic injection — the ONLY reliable way to inject into existing tabs.
 // content_scripts in manifest only auto-inject into NEW tabs opened after extension loads.
@@ -38,6 +36,7 @@ async function injectIntoTab(tabId) {
 
 // Inject into all open YouTube tabs when extension installs or updates
 chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
   chrome.tabs.query({ url: 'https://www.youtube.com/*' }, (tabs) => {
     for (const tab of tabs) injectIntoTab(tab.id)
   })

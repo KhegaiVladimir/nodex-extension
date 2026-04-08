@@ -1,32 +1,43 @@
 # Nodex
 
-Nodex is a Chrome extension for hands-free YouTube control using head and face
-gestures processed fully on-device.
+Control YouTube hands-free with head gestures. Chrome MV3 extension.
 
 ## Features
+- **Player mode**: seek, volume, play/pause via head tilts, nods, and blinks.
+- **Browse mode**: navigate video thumbnails on the home page with a focus ring controlled by head movements.
+- **On-device**: face tracking runs entirely in your browser via MediaPipe. No video leaves your device.
+- **Calibration**: guided flow adapts to your face and head range.
+- **Custom mappings**: remap any gesture to any command.
 
-- Player mode controls playback (play/pause, seek, volume, mute, next/previous).
-- Browse mode navigates YouTube thumbnails with a visible focus ring.
-- Side panel for onboarding, calibration, gesture mapping, and sensitivity.
-- HUD overlay with mode indicator, commands, and live metrics.
-- Local MediaPipe Face Mesh assets (no remote code execution).
+## How it works
+Nodex injects a content script into youtube.com that captures webcam frames,
+runs MediaPipe Face Mesh (468 landmarks at 30 FPS), computes head pose
+(yaw/pitch/roll), eye aspect ratio, and mouth aperture, and maps recognized
+gestures to YouTube commands.
 
-## Privacy
+## Tech stack
+- Manifest V3 Chrome Extension
+- MediaPipe Face Mesh (WASM + SIMD, bundled locally)
+- React 18 side panel
+- Vite build
+- Shadow DOM HUD overlay
+- Split MAIN/ISOLATED world content scripts to bypass Trusted Types CSP
 
-Nodex processes camera frames locally in the browser and does not transmit video
-or facial data to any server. See `PRIVACY.md` for details.
+## Install
+Chrome Web Store: [coming soon]
 
 ## Development
-
 ```bash
 npm install
-npm run build
+npm run build           # one-off build → dist/
+npm run dev             # watch mode
+npm run prod            # clean build + zip → nodex.zip
 ```
 
-## Release
+Load unpacked: `chrome://extensions` → Developer mode → Load unpacked → select `dist/`.
 
-```bash
-npm run prod
-```
+## Privacy
+See [PRIVACY.md](./PRIVACY.md). TL;DR: nothing leaves your device.
 
-This produces `nodex.zip` ready for Chrome Web Store upload.
+## License
+MIT

@@ -1,14 +1,14 @@
 {
   "name": "nodex-extension",
   "version": "1.0.0",
-  "description": "Hands-free YouTube control via face gestures",
+  "description": "Hands-free YouTube control via head gestures. Chrome MV3 extension.",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js build --watch",
     "build": "node node_modules/vite/bin/vite.js build",
     "zip": "cd dist && zip -r ../nodex.zip .",
-    "prod": "rm -rf dist nodex.zip && npm run build && npm run zip"
+    "prod": "rm -rf dist nodex.zip && npm run build && cd dist && zip -r ../nodex.zip ."
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.zip
 .DS_Store
+.env
+.cursorrules
+store-assets/*
+!store-assets/.gitkeep

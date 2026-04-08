@@ -21,11 +21,16 @@ import {
 /* ── helpers ── */
 
 async function getActiveTabId() {
-  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
-  if (tabs.length > 0) return tabs[0].id
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
+    if (tabs.length > 0) return tabs[0].id
 
-  const [tab] = await chrome.tabs.query({ active: true })
-  return tab?.id ?? null
+    const [tab] = await chrome.tabs.query({ active: true })
+    return tab?.id ?? null
+  } catch (e) {
+    console.error('[Nodex] tabs.query failed:', e)
+    return null
+  }
 }
 
 async function sendToContent(payload) {
@@ -411,6 +416,7 @@ export default function App() {
 
   useEffect(() => {
     const listener = (message) => {
+      if (!message || typeof message.type !== 'string') return
       switch (message.type) {
         case MSG.ENGINE_STATUS:
           setRunning(message.running)
@@ -426,6 +432,8 @@ export default function App() {
         case MSG.BROWSE_MODE_CHANGED:
           setBrowseMode(message.browseMode)
           setModeChanging(false)
+          break
+        default:
           break
       }
     }
