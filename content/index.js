@@ -70,8 +70,9 @@ class NodexContentScript {
     this._playerGestureMap = null
     this._browseGestureMap = null
 
-    this._onMessage       = this._handleMessage.bind(this)
-    this._onWindowMessage = this._handleWindowMessage.bind(this)
+    this._onMessage          = this._handleMessage.bind(this)
+    this._onWindowMessage    = this._handleWindowMessage.bind(this)
+    this._onVisibilityChange = this._handleVisibilityChange.bind(this)
 
     this._lastLandmarkTime    = 0
     this._watchdogTimer       = null
@@ -111,9 +112,11 @@ class NodexContentScript {
       onCommand:  (cmd, gesture, metrics) => this._handleCommand(cmd, gesture, metrics),
       onMetrics:  (metrics) => this._handleMetrics(metrics),
     })
+    this._ensureGesturePipelineReady()
 
     window.addEventListener('message', this._onWindowMessage)
     chrome.runtime.onMessage.addListener(this._onMessage)
+    document.addEventListener('visibilitychange', this._onVisibilityChange)
 
     this._observeNavigation()
 
@@ -121,7 +124,16 @@ class NodexContentScript {
       await this.start()
     }
 
+    this._ensureGesturePipelineReady()
     this._sendStatus()
+  }
+
+  /**
+   * Production: `blocked` is not persisted — always confirm the pipeline is open after
+   * init/restart so gestures work from the first frame (no stuck calibration lock).
+   */
+  _ensureGesturePipelineReady() {
+    this._gestureEngine?.updateSettings({ blocked: false })
   }
 
   async start() {
@@ -130,7 +142,9 @@ class NodexContentScript {
     // side panel can sync its UI state. Without this, Step 2 of onboarding
     // hangs on "waiting" for 10 seconds and times out.
     if (this._running) {
+      this._ensureGesturePipelineReady()
       this._sendStatus()
+      if (this._browseMode) this._browseController.refreshIfActive()
       return
     }
     this._running = true
@@ -143,6 +157,7 @@ class NodexContentScript {
     this._hud.show()
     this._startWatchdog()
     if (!this._manualModeOverride) this._autoSetMode()
+    this._ensureGesturePipelineReady()
     await saveSettings({ engine_active: true }).catch(() => {})
     this._sendStatus()
   }
@@ -177,6 +192,7 @@ class NodexContentScript {
     window.postMessage({ type: 'NODEX_STOP_CAMERA' }, '*')
     window.removeEventListener('message', this._onWindowMessage)
     chrome.runtime.onMessage.removeListener(this._onMessage)
+    document.removeEventListener('visibilitychange', this._onVisibilityChange)
 
     this._gestureEngine?.destroy()
     this._hud?.unmount()
@@ -186,6 +202,11 @@ class NodexContentScript {
   }
 
   // --- Single entry point for mode changes ---
+
+  _handleVisibilityChange() {
+    if (this._destroyed || document.visibilityState !== 'visible') return
+    if (this._browseMode) this._browseController.refreshIfActive()
+  }
 
   _setMode(browse) {
     if (browse === this._browseMode) return
@@ -388,6 +409,10 @@ class NodexContentScript {
         this._gestureEngine?.updateSettings({ blocked: true })
         break
 
+      case MSG.CALIBRATION_CANCEL:
+        this._gestureEngine?.updateSettings({ blocked: false })
+        break
+
       case MSG.TUTORIAL_START:
         this._tutorialMode = true
         this._tutorialModeDeadline = Date.now() + 5 * 60 * 1000  // max 5 minutes
@@ -395,13 +420,22 @@ class NodexContentScript {
 
       case MSG.TUTORIAL_END:
         this._tutorialMode = false
+        if (this._browseMode) this._browseController.refreshIfActive()
         break
 
       case MSG.SAVE_CALIBRATION:
         if (message.baseline) {
           saveCalibration(message.baseline)
-            .then(() => this._gestureEngine?.updateSettings({ baseline: message.baseline, blocked: false }))
-            .catch(console.error)
+            .then(() => {
+              this._gestureEngine?.updateSettings({ baseline: message.baseline, blocked: false })
+              if (this._browseMode) this._browseController.refreshIfActive()
+            })
+            .catch((err) => {
+              console.error(err)
+              this._gestureEngine?.updateSettings({ blocked: false })
+            })
+        } else {
+          this._gestureEngine?.updateSettings({ blocked: false })
         }
         break
 

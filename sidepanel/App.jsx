@@ -37,11 +37,19 @@ async function getActiveTabId() {
 async function sendToContent(payload) {
   const tabId = await getActiveTabId()
   if (tabId == null) return
-  chrome.runtime.sendMessage({
-    type: MSG.SIDEPANEL_TO_CONTENT,
-    tabId,
-    inner: payload,
-  }).catch(() => {})
+  try {
+    await chrome.runtime.sendMessage({
+      type: MSG.SIDEPANEL_TO_CONTENT,
+      tabId,
+      inner: payload,
+    })
+  } catch {
+    /* tab gone or SW busy */
+  }
+}
+
+function sendCalibrationCancel() {
+  sendToContent({ type: MSG.CALIBRATION_CANCEL })
 }
 
 const GESTURE_LABELS = {
@@ -333,14 +341,16 @@ function useCalibration() {
   const framesRef = useRef([])
   const doneRef = useRef(false)
 
-  const startCalibration = useCallback(() => {
+  const startCalibration = useCallback(async () => {
     setPhase('capturing')
     setProgress(0)
     setError(null)
     framesRef.current = []
     doneRef.current = false
 
-    sendToContent({ type: MSG.CALIBRATION_START })
+    // Clear any stuck blocked state from a failed session, then start capture (production order).
+    await sendToContent({ type: MSG.CALIBRATION_CANCEL })
+    await sendToContent({ type: MSG.CALIBRATION_START })
 
     const started = Date.now()
 
@@ -350,12 +360,14 @@ function useCalibration() {
 
       const frames = framesRef.current
       if (frames.length === 0) {
+        sendCalibrationCancel()
         setError('No frames for calibration.')
         setPhase('idle')
         return
       }
 
       if (frames.length < 15) {
+        sendCalibrationCancel()
         setError('Not enough frames captured. Check that your face is visible to the camera.')
         setPhase('idle')
         return
@@ -367,6 +379,7 @@ function useCalibration() {
         .filter((e) => typeof e === 'number' && Number.isFinite(e) && e > 0.06 && e < 0.52)
 
       if (earSamples.length < 5) {
+        sendCalibrationCancel()
         setError(
           'Could not get a stable eye reading. Face the camera with eyes open, in good light.',
         )
@@ -388,6 +401,7 @@ function useCalibration() {
         await sendToContent({ type: MSG.SAVE_CALIBRATION, baseline })
         setPhase('done')
       } catch (err) {
+        sendCalibrationCancel()
         setError(`Save error: ${err.message}`)
         setPhase('idle')
       }
@@ -412,6 +426,8 @@ function useCalibration() {
       chrome.runtime.onMessage.removeListener(listener)
       if (framesRef.current.length > 0) finalize()
       else if (!doneRef.current) {
+        doneRef.current = true
+        sendCalibrationCancel()
         setPhase('idle')
         setError('No metrics received. Make sure the engine is running.')
       }
@@ -419,6 +435,7 @@ function useCalibration() {
   }, [])
 
   const reset = useCallback(() => {
+    sendCalibrationCancel()
     setPhase('idle')
     setProgress(0)
     setError(null)

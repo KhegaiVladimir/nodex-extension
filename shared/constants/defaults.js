@@ -32,7 +32,7 @@ export const DEFAULT_COOLDOWNS = {
   [GESTURES.HEAD_RIGHT]:  400,
   [GESTURES.TILT_LEFT]:   800,
   [GESTURES.TILT_RIGHT]:  800,
-  [GESTURES.EYES_CLOSED]: 1000,
+  [GESTURES.EYES_CLOSED]: 1200,
   [GESTURES.MOUTH_OPEN]:  600,
 }
 
@@ -45,12 +45,24 @@ export const DEFAULT_THRESHOLDS = {
   hysteresis: 3,
 }
 
+/**
+ * While head pose exceeds these bands (deg, relative to calibrated neutral), eye-close
+ * is ignored — turning the head skews landmarks and EAR drops falsely vs real blinks.
+ * Scales with sensitivity (T.yaw / T.pitch / T.roll).
+ */
+export const EYE_HEAD_CONFLICT_FRAC = {
+  yaw: 0.48,
+  pitch: 0.7,
+  roll: 0.72,
+}
+
 // Eye close timing: fire on eyes-open, based on how long they were shut.
 // [MIN, MAX): short blink → main command (PLAY_PAUSE by default).
 // [MAX, LONG_MAX]: long blink → BACK.
 // Anything longer: ignored (user just closed their eyes, not a gesture).
 export const EYE_CLOSE_MIN_MS   = 150
-export const EYE_CLOSE_MAX_MS   = 600
+// Short-blink window upper bound (exclusive below): ~0.5s label + timing jitter.
+export const EYE_CLOSE_MAX_MS   = 720
 export const LONG_BLINK_MAX_MS  = 2000
 
 // Inline calibration via long blink was removed — it conflicted with BACK

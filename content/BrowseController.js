@@ -29,7 +29,7 @@ const MUTATION_DEBOUNCE_MS = 800
 const SCROLL_TRACK_MS = 400
 const PERIODIC_SCAN_MS = 5000
 /** Minimum gap between browse movement commands (gestures must not double-step). */
-const BROWSE_COMMAND_COOLDOWN_MS = 700
+const BROWSE_COMMAND_COOLDOWN_MS = 880
 
 const OBSERVER_ROOT_SELECTORS = [
   'ytd-rich-grid-renderer',
@@ -254,11 +254,15 @@ export class BrowseController {
     this._onScroll = this._handleScroll.bind(this)
     this._lastVerticalCmdAt = 0
     this._lastVerticalDirection = 0
+    /** @type {(() => void) | null} */
+    this._onBrowseResize = null
+    /** @type {((e: Event) => void) | null} */
+    this._onBrowsePageShow = null
   }
 
   activate() {
     this.deactivate()
-    this._createFocusRing()
+    this._ensureFocusRing()
     this._scanItems()
     this._focusFirstVisible()
 
@@ -274,11 +278,30 @@ export class BrowseController {
     this._observer.observe(container, { subtree: true, childList: true })
     window.addEventListener('scroll', this._onScroll, { passive: true })
 
+    this._onBrowseResize = () => {
+      this._ensureFocusRing()
+      if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
+    }
+    window.addEventListener('resize', this._onBrowseResize, { passive: true })
+
+    this._onBrowsePageShow = (e) => {
+      // bfcache: ring was detached from the frozen document; force recreate.
+      if (e.persisted) this._focusRing = null
+      this._ensureFocusRing()
+      this._scanItems()
+      if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
+      else if (this._currentItems.length > 0) this._focusFirstVisible()
+    }
+    window.addEventListener('pageshow', this._onBrowsePageShow)
+
     this._periodicTimer = setInterval(() => {
       if (performance.now() - this._lastCommandAt < 1500) return
+      this._ensureFocusRing()
       this._scanItems()
       if (this._focusIndex < 0 && this._currentItems.length > 0) {
         this._focusFirstVisible()
+      } else if (this._focusIndex >= 0) {
+        this._highlightItem(this._focusIndex)
       }
     }, PERIODIC_SCAN_MS)
 
@@ -287,6 +310,20 @@ export class BrowseController {
     }
 
     return this._currentItems.length
+  }
+
+  /**
+   * Re-scan the grid and redraw the focus ring. Call after calibration or whenever
+   * the feed may have swapped DOM nodes while browse mode stayed active.
+   */
+  refreshIfActive() {
+    this._ensureFocusRing()
+    this._scanItems()
+    if (this._focusIndex < 0 && this._currentItems.length > 0) {
+      this._focusFirstVisible()
+    } else if (this._focusIndex >= 0) {
+      this._highlightItem(this._focusIndex)
+    }
   }
 
   deactivate() {
@@ -299,6 +336,14 @@ export class BrowseController {
     this._observer?.disconnect()
     this._observer = null
     window.removeEventListener('scroll', this._onScroll)
+    if (this._onBrowseResize) {
+      window.removeEventListener('resize', this._onBrowseResize)
+      this._onBrowseResize = null
+    }
+    if (this._onBrowsePageShow) {
+      window.removeEventListener('pageshow', this._onBrowsePageShow)
+      this._onBrowsePageShow = null
+    }
 
     if (this._focusRing) {
       this._focusRing.remove()
@@ -365,21 +410,37 @@ export class BrowseController {
     return this._currentItems.length > 0
   }
 
+  /**
+   * Recreate the ring if YouTube (or another script) removed it from the DOM while
+   * keeping our JS reference — otherwise _createFocusRing would no-op forever.
+   */
+  _ensureFocusRing() {
+    if (this._focusRing && !this._focusRing.isConnected) {
+      this._focusRing = null
+    }
+    this._createFocusRing()
+  }
+
   _createFocusRing() {
-    if (this._focusRing) return
+    if (this._focusRing?.isConnected) return
+    if (this._focusRing && !this._focusRing.isConnected) {
+      this._focusRing = null
+    }
     const ring = document.createElement('div')
     ring.id = 'nodex-focus-ring'
+    ring.setAttribute('data-nodex', 'focus-ring')
     Object.assign(ring.style, {
       position: 'fixed',
       pointerEvents: 'none',
-      zIndex: '2147483646',
+      zIndex: '2147483647',
       border: '3px solid #00e5ff',
       borderRadius: '12px',
       boxShadow: '0 0 0 4px rgba(0, 229, 255, 0.2)',
       transition: 'top 0.15s ease, left 0.15s ease, width 0.15s ease, height 0.15s ease',
       display: 'none',
     })
-    document.body.appendChild(ring)
+    const root = document.body || document.documentElement
+    root.appendChild(ring)
     this._focusRing = ring
   }
 
@@ -472,15 +533,10 @@ export class BrowseController {
       firstHref: items[0]?.href ?? '',
       lastHref: items[items.length - 1]?.href ?? '',
     }
-    if (
-      this._itemListSignature &&
-      nextSig.count === this._itemListSignature.count &&
-      nextSig.firstHref === this._itemListSignature.firstHref &&
-      nextSig.lastHref === this._itemListSignature.lastHref
-    ) {
-      if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
-      return
-    }
+    // Never skip updating _currentItems when the "signature" matches. YouTube's SPA
+    // often replaces thumbnail nodes while keeping the same first/last URLs and count;
+    // stale element refs then fail isConnected in _highlightItem → focus ring stays hidden
+    // until a full page reload.
     this._itemListSignature = nextSig
 
     this._currentItems = items
@@ -752,25 +808,35 @@ export class BrowseController {
   }
 
   _highlightItem(index) {
+    this._ensureFocusRing()
     this._focusIndex = index
     const el = this._currentItems[index]
     if (!el || !el.isConnected) {
       if (this._focusRing) this._focusRing.style.display = 'none'
       return
     }
+    const applyRect = (r) => {
+      if (!this._focusRing?.isConnected) return
+      Object.assign(this._focusRing.style, {
+        display: 'block',
+        top: `${r.top - 4}px`,
+        left: `${r.left - 4}px`,
+        width: `${r.width + 8}px`,
+        height: `${r.height + 8}px`,
+      })
+    }
+
     const rect = el.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) {
-      if (this._focusRing) this._focusRing.style.display = 'none'
+      requestAnimationFrame(() => {
+        if (!el.isConnected) return
+        const r2 = el.getBoundingClientRect()
+        if (r2.width > 0 && r2.height > 0) applyRect(r2)
+        else if (this._focusRing) this._focusRing.style.display = 'none'
+      })
       return
     }
-    if (!this._focusRing) return
-    Object.assign(this._focusRing.style, {
-      display: 'block',
-      top: `${rect.top - 4}px`,
-      left: `${rect.left - 4}px`,
-      width: `${rect.width + 8}px`,
-      height: `${rect.height + 8}px`,
-    })
+    applyRect(rect)
   }
 
   _trackScrollPosition() {

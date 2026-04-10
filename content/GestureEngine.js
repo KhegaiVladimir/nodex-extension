@@ -6,7 +6,7 @@ import {
   DEFAULT_THRESHOLDS,
   EYE_CLOSE_MIN_MS,
   EYE_CLOSE_MAX_MS,
-  LONG_BLINK_MAX_MS,
+  EYE_HEAD_CONFLICT_FRAC,
 } from '../shared/constants/defaults.js'
 import { Cooldown } from '../shared/utils/cooldown.js'
 import {
@@ -30,6 +30,8 @@ export class GestureEngine {
 
     this._active          = GESTURES.NONE
     this._eyeCloseStart   = null
+    /** Hysteresis: latched "eyes look closed" so borderline EAR does not reset duration. */
+    this._eyeClosedLatch  = false
     this._blocked         = false
     this._destroyed       = false
 
@@ -70,33 +72,67 @@ export class GestureEngine {
 
     if (this._blocked) {
       this._eyeCloseStart = null
+      this._eyeClosedLatch = false
       this._active = GESTURES.NONE
       return
     }
 
     // --- Eye-close timing: fire on eyes OPEN based on closed duration ---
-    // With calibration: compare raw EAR to a **fraction of baseline open-eye EAR**
-    // (classic blink detection). Avoids mixing absolute T.earClose with raw ratios
-    // when open-eye EAR is ~0.18–0.20 (false "closed" vs fixed 0.22).
-    // Without baseline EAR: fall back to absolute threshold from settings.
-    if (earRaw != null && Number.isFinite(earRaw)) {
-      const eyeClosed =
-        bl?.ear > 0.06
-          ? earRaw < bl.ear * 0.55
-          : earRaw < T.earClose
+    // Skip while head is clearly off neutral — yaw/pitch/roll distort EAR and look like
+    // "closed eyes" when you are only turning your head (common false positive).
+    const f = EYE_HEAD_CONFLICT_FRAC
+    const yLim = (T.yaw ?? 15) * f.yaw
+    const pLim = (T.pitch ?? 10) * f.pitch
+    const rLim = (T.roll ?? 15) * f.roll
+    const headPoseBlocksEyes =
+      Math.abs(yaw) > yLim ||
+      Math.abs(pitch) > pLim ||
+      Math.abs(roll) > rLim
 
-      if (eyeClosed) {
-        if (this._eyeCloseStart === null) this._eyeCloseStart = Date.now()
-      } else if (this._eyeCloseStart !== null) {
-        const duration = Date.now() - this._eyeCloseStart
+    if (earRaw != null && Number.isFinite(earRaw)) {
+      if (headPoseBlocksEyes) {
         this._eyeCloseStart = null
-        const cd = this._cooldowns[GESTURES.EYES_CLOSED]
-        if (cd && cd.fire()) {
-          if (duration >= EYE_CLOSE_MIN_MS && duration < EYE_CLOSE_MAX_MS) {
-            const cmd = this._gestureMap[GESTURES.EYES_CLOSED] ?? COMMANDS.NONE
-            if (cmd !== COMMANDS.NONE) this._onCommand?.(cmd, GESTURES.EYES_CLOSED, metrics)
-          } else if (duration >= EYE_CLOSE_MAX_MS && duration <= LONG_BLINK_MAX_MS) {
-            this._onCommand?.(COMMANDS.BACK, GESTURES.EYES_CLOSED, metrics)
+        this._eyeClosedLatch = false
+      } else {
+        // Latched hysteresis. Narrow eyes: slightly looser ratios; wide eyes: tighter.
+        let enterT
+        let exitT
+        if (bl?.ear > 0.06) {
+          const openRef = bl.ear
+          const narrowEye = openRef < 0.24
+          if (narrowEye) {
+            enterT = openRef * 0.80
+            exitT = openRef * 0.93
+          } else {
+            enterT = openRef * 0.68
+            exitT = openRef * 0.82
+          }
+        } else {
+          enterT = T.earClose * 0.95
+          exitT = T.earClose * 1.12
+        }
+
+        if (!this._eyeClosedLatch && earRaw < enterT) {
+          this._eyeClosedLatch = true
+        } else if (this._eyeClosedLatch && earRaw > exitT) {
+          this._eyeClosedLatch = false
+        }
+
+        const eyeClosed = this._eyeClosedLatch
+
+        if (eyeClosed) {
+          if (this._eyeCloseStart === null) this._eyeCloseStart = Date.now()
+        } else if (this._eyeCloseStart !== null) {
+          const duration = Date.now() - this._eyeCloseStart
+          this._eyeCloseStart = null
+          const cd = this._cooldowns[GESTURES.EYES_CLOSED]
+          if (cd && cd.fire()) {
+            if (duration >= EYE_CLOSE_MIN_MS && duration < EYE_CLOSE_MAX_MS) {
+              const cmd = this._gestureMap[GESTURES.EYES_CLOSED] ?? COMMANDS.NONE
+              if (cmd !== COMMANDS.NONE) this._onCommand?.(cmd, GESTURES.EYES_CLOSED, metrics)
+            } else if (duration >= EYE_CLOSE_MAX_MS) {
+              this._onCommand?.(COMMANDS.BACK, GESTURES.EYES_CLOSED, metrics)
+            }
           }
         }
       }
@@ -144,6 +180,7 @@ export class GestureEngine {
     this._destroyed = true
     this._active = GESTURES.NONE
     this._eyeCloseStart = null
+    this._eyeClosedLatch = false
     this._onCommand = null
     this._onMetrics = null
     for (const cd of Object.values(this._cooldowns)) cd.reset()
