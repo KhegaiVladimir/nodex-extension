@@ -112,21 +112,21 @@ export function computeRoll(lm) {
  * Left eye landmarks:  386 (upper), 374 (lower), 362 (inner), 263 (outer).
  *
  * @param {Array<{x:number, y:number, z:number}>} lm - 468 landmarks
- * @returns {number} ratio, lower = more closed
+ * @returns {number|null} ratio (lower = more closed), or `null` if landmarks are unusable
  */
 export function computeEAR(lm) {
-  if (!lm?.length) return 0.3
+  if (!lm?.length) return null
 
   const rU = lm[RIGHT_EYE_UPPER], rL = lm[RIGHT_EYE_LOWER]
   const rI = lm[RIGHT_EYE_INNER], rO = lm[RIGHT_EYE_OUTER]
   const lU = lm[LEFT_EYE_UPPER],  lL = lm[LEFT_EYE_LOWER]
   const lI = lm[LEFT_EYE_INNER],  lO = lm[LEFT_EYE_OUTER]
 
-  if (!rU || !rL || !rI || !rO || !lU || !lL || !lI || !lO) return 0.3
+  if (!rU || !rL || !rI || !rO || !lU || !lL || !lI || !lO) return null
 
   const rHoriz = dist(rI, rO)
   const lHoriz = dist(lI, lO)
-  if (rHoriz < MIN_SPAN || lHoriz < MIN_SPAN) return 0.3
+  if (rHoriz < MIN_SPAN || lHoriz < MIN_SPAN) return null
 
   return (dist(rU, rL) / rHoriz + dist(lU, lL) / lHoriz) / 2
 }

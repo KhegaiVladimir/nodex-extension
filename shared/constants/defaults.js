@@ -45,12 +45,19 @@ export const DEFAULT_THRESHOLDS = {
   hysteresis: 3,
 }
 
-export const EYE_CLOSE_MIN_MS   = 450
-export const EYE_CLOSE_MAX_MS   = 900
-export const LONG_BLINK_MAX_MS  = 1500
+// Eye close timing: fire on eyes-open, based on how long they were shut.
+// [MIN, MAX): short blink → main command (PLAY_PAUSE by default).
+// [MAX, LONG_MAX]: long blink → BACK.
+// Anything longer: ignored (user just closed their eyes, not a gesture).
+export const EYE_CLOSE_MIN_MS   = 150
+export const EYE_CLOSE_MAX_MS   = 600
+export const LONG_BLINK_MAX_MS  = 2000
 
-export const CALIBRATION_BLINK_MIN_MS = 1500
-export const CALIBRATION_BLINK_MAX_MS = 3000
+// Inline calibration via long blink was removed — it conflicted with BACK
+// and calibration is available from the side panel anyway. Keep the exports
+// as sentinels so imports in GestureEngine don't break; the code path is gone.
+export const CALIBRATION_BLINK_MIN_MS = Number.POSITIVE_INFINITY
+export const CALIBRATION_BLINK_MAX_MS = Number.POSITIVE_INFINITY
 
 export const SENSITIVITY_PRESETS = {
   low: {

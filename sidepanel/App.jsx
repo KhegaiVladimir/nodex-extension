@@ -16,6 +16,7 @@ import {
   loadPlayerGestureMap,
   loadBrowseGestureMap,
   loadSettings,
+  loadCalibration,
 } from '../shared/storage.js'
 
 /* ── helpers ── */
@@ -85,7 +86,7 @@ const BROWSE_COMMANDS = [
   COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.NONE,
 ]
 
-const CALIBRATION_DURATION_MS = 3000
+const CALIBRATION_DURATION_MS = 4000
 const CALIBRATION_FPS = 15
 
 const TUTORIAL_GESTURES = [
@@ -315,6 +316,14 @@ const S = {
   },
 }
 
+/** @param {number[]} nums */
+function medianOf(nums) {
+  if (nums.length === 0) return 0
+  const s = [...nums].sort((a, b) => a - b)
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
 /* ── useCalibration hook ── */
 
 function useCalibration() {
@@ -346,11 +355,32 @@ function useCalibration() {
         return
       }
 
+      if (frames.length < 15) {
+        setError('Not enough frames captured. Check that your face is visible to the camera.')
+        setPhase('idle')
+        return
+      }
+
+      // Valid open-eye EAR band; drop invalid/null frames and outliers (blinks, glitches).
+      const earSamples = frames
+        .map((f) => f.ear)
+        .filter((e) => typeof e === 'number' && Number.isFinite(e) && e > 0.06 && e < 0.52)
+
+      if (earSamples.length < 5) {
+        setError(
+          'Could not get a stable eye reading. Face the camera with eyes open, in good light.',
+        )
+        setPhase('idle')
+        return
+      }
+
+      const avgEar = medianOf(earSamples)
+
       const baseline = {
         yaw:   frames.reduce((s, f) => s + (f.yaw ?? 0), 0) / frames.length,
         pitch: frames.reduce((s, f) => s + (f.pitch ?? 0), 0) / frames.length,
         roll:  frames.reduce((s, f) => s + (f.roll ?? 0), 0) / frames.length,
-        ear:   frames.reduce((s, f) => s + (f.ear ?? 0), 0) / frames.length,
+        ear:   avgEar,
       }
 
       try {
@@ -409,8 +439,18 @@ export default function App() {
   const [lastCommand, setLastCommand] = useState(null)
 
   useEffect(() => {
-    loadSettings({}).then((settings) => {
-      setOnboarded(settings.onboarding_complete === true)
+    Promise.all([loadSettings({}), loadCalibration()]).then(([settings, calibration]) => {
+      // Consider the user onboarded if either:
+      // (a) the explicit flag is set, OR
+      // (b) a calibration already exists (user clearly completed at least Step 3).
+      // The second path protects against the flag being lost to storage races.
+      const onboardedNow = Boolean(settings.onboarding_complete) || Boolean(calibration)
+      setOnboarded(onboardedNow)
+      // Back-fill the flag if calibration exists but flag is missing,
+      // so next time the fast path works.
+      if (onboardedNow && !settings.onboarding_complete) {
+        saveSettings({ onboarding_complete: true }).catch(() => {})
+      }
     })
   }, [])
 
@@ -650,7 +690,7 @@ function OnboardStep3({ onNext }) {
               </p>
             )}
             <button style={S.onboardBtn} onClick={startCalibration}>
-              Start calibration (3 sec)
+              Start calibration (4 sec)
             </button>
           </>
         )}
@@ -692,6 +732,8 @@ function OnboardStep4({ onComplete }) {
   }, [])
 
   useEffect(() => {
+    sendToContent({ type: MSG.TUTORIAL_START })
+
     const listener = (message) => {
       if (message.type !== MSG.COMMAND_EXECUTED) return
       const g = message.gesture
@@ -705,7 +747,10 @@ function OnboardStep4({ onComplete }) {
       })
     }
     chrome.runtime.onMessage.addListener(listener)
-    return () => chrome.runtime.onMessage.removeListener(listener)
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener)
+      sendToContent({ type: MSG.TUTORIAL_END })
+    }
   }, [])
 
   const handleFinish = useCallback(async () => {
@@ -852,7 +897,7 @@ function CalibrationScreen() {
         <>
           <p style={{ color: 'var(--muted)', fontSize: '12px', marginBottom: '12px' }}>
             Look straight into the camera and tap the button. Hold a neutral head
-            pose for 3 seconds.
+            pose for 4 seconds.
           </p>
           {error && (
             <p style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</p>

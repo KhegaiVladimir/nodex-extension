@@ -7,8 +7,6 @@ import {
   EYE_CLOSE_MIN_MS,
   EYE_CLOSE_MAX_MS,
   LONG_BLINK_MAX_MS,
-  CALIBRATION_BLINK_MIN_MS,
-  CALIBRATION_BLINK_MAX_MS,
 } from '../shared/constants/defaults.js'
 import { Cooldown } from '../shared/utils/cooldown.js'
 import {
@@ -23,14 +21,12 @@ export class GestureEngine {
     baseline   = null,
     onCommand  = null,
     onMetrics  = null,
-    onCalibrationRequest = null,
   } = {}) {
     this._thresholds = { ...thresholds }
     this._gestureMap = { ...gestureMap }
     this._baseline   = baseline
     this._onCommand  = onCommand
     this._onMetrics  = onMetrics
-    this._onCalibrationRequest = onCalibrationRequest
 
     this._active          = GESTURES.NONE
     this._eyeCloseStart   = null
@@ -54,7 +50,7 @@ export class GestureEngine {
     let yaw   = computeYaw(landmarks)
     let pitch = computePitch(landmarks)
     let roll  = computeRoll(landmarks)
-    const ear   = computeEAR(landmarks)
+    const earRaw = computeEAR(landmarks)
     const mouth = computeMouthRatio(landmarks)
 
     if (bl) {
@@ -63,7 +59,13 @@ export class GestureEngine {
       roll  -= bl.roll  ?? 0
     }
 
-    const metrics = { yaw, pitch, roll, ear, mouth }
+    const metrics = {
+      yaw,
+      pitch,
+      roll,
+      ear: earRaw == null ? undefined : earRaw,
+      mouth,
+    }
     this._onMetrics?.(metrics)
 
     if (this._blocked) {
@@ -73,22 +75,29 @@ export class GestureEngine {
     }
 
     // --- Eye-close timing: fire on eyes OPEN based on closed duration ---
-    const earThreshold = (bl?.ear > 0) ? bl.ear * 0.75 : T.earClose
-    const eyesClosed = ear < earThreshold
-    if (eyesClosed) {
-      if (this._eyeCloseStart === null) this._eyeCloseStart = Date.now()
-    } else if (this._eyeCloseStart !== null) {
-      const duration = Date.now() - this._eyeCloseStart
-      this._eyeCloseStart = null
-      const cd = this._cooldowns[GESTURES.EYES_CLOSED]
-      if (duration >= CALIBRATION_BLINK_MIN_MS && duration <= CALIBRATION_BLINK_MAX_MS) {
-        this._onCalibrationRequest?.()
-      } else if (cd && cd.fire()) {
-        if (duration >= EYE_CLOSE_MAX_MS && duration <= LONG_BLINK_MAX_MS) {
-          this._onCommand?.(COMMANDS.BACK, GESTURES.EYES_CLOSED, metrics)
-        } else if (duration >= EYE_CLOSE_MIN_MS && duration < EYE_CLOSE_MAX_MS) {
-          const cmd = this._gestureMap[GESTURES.EYES_CLOSED] ?? COMMANDS.NONE
-          if (cmd !== COMMANDS.NONE) this._onCommand?.(cmd, GESTURES.EYES_CLOSED, metrics)
+    // With calibration: compare raw EAR to a **fraction of baseline open-eye EAR**
+    // (classic blink detection). Avoids mixing absolute T.earClose with raw ratios
+    // when open-eye EAR is ~0.18–0.20 (false "closed" vs fixed 0.22).
+    // Without baseline EAR: fall back to absolute threshold from settings.
+    if (earRaw != null && Number.isFinite(earRaw)) {
+      const eyeClosed =
+        bl?.ear > 0.06
+          ? earRaw < bl.ear * 0.55
+          : earRaw < T.earClose
+
+      if (eyeClosed) {
+        if (this._eyeCloseStart === null) this._eyeCloseStart = Date.now()
+      } else if (this._eyeCloseStart !== null) {
+        const duration = Date.now() - this._eyeCloseStart
+        this._eyeCloseStart = null
+        const cd = this._cooldowns[GESTURES.EYES_CLOSED]
+        if (cd && cd.fire()) {
+          if (duration >= EYE_CLOSE_MIN_MS && duration < EYE_CLOSE_MAX_MS) {
+            const cmd = this._gestureMap[GESTURES.EYES_CLOSED] ?? COMMANDS.NONE
+            if (cmd !== COMMANDS.NONE) this._onCommand?.(cmd, GESTURES.EYES_CLOSED, metrics)
+          } else if (duration >= EYE_CLOSE_MAX_MS && duration <= LONG_BLINK_MAX_MS) {
+            this._onCommand?.(COMMANDS.BACK, GESTURES.EYES_CLOSED, metrics)
+          }
         }
       }
     }
@@ -137,7 +146,6 @@ export class GestureEngine {
     this._eyeCloseStart = null
     this._onCommand = null
     this._onMetrics = null
-    this._onCalibrationRequest = null
     for (const cd of Object.values(this._cooldowns)) cd.reset()
   }
 

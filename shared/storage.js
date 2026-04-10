@@ -28,14 +28,28 @@ export async function saveCalibration(data) {
 
 export async function loadSettings(defaults = {}) {
   const stored = await get(KEYS.SETTINGS)
-  return { ...defaults, ...stored }
+  // Normalize onboarding_complete: accept any truthy value as "onboarded"
+  // to survive past bugs where it might have been saved as "true" (string) or 1.
+  if (stored && stored.onboarding_complete) {
+    stored.onboarding_complete = true
+  }
+  return { ...defaults, ...(stored ?? {}) }
 }
 
+let settingsWriteQueue = Promise.resolve()
+
 export async function saveSettings(patch) {
-  const current = await get(KEYS.SETTINGS)
-  const merged = { ...current, ...patch }
-  await set(KEYS.SETTINGS, merged)
-  return merged
+  // Serialize all writes to prevent read-modify-write races between
+  // the side panel, content script, and service worker all writing
+  // to the same settings object concurrently.
+  const next = settingsWriteQueue.then(async () => {
+    const current = (await get(KEYS.SETTINGS)) ?? {}
+    const merged = { ...current, ...patch }
+    await set(KEYS.SETTINGS, merged)
+    return merged
+  })
+  settingsWriteQueue = next.catch(() => {})
+  return next
 }
 
 export async function loadGestureMap(defaults = {}) {

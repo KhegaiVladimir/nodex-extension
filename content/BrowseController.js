@@ -141,13 +141,20 @@ function isShelfRow(row) {
 }
 
 /**
- * Build visual rows for YouTube home grid:
- * - shelves stay as dedicated DOM rows
- * - non-shelf cards are grouped by rounded top bands (stable against small top jitter)
+ * Group flat-grid items into rows by vertical clustering.
+ *
+ * Previously we bucketed by Math.round(top / rowStep), which is unstable on
+ * bucket boundaries — a 2px difference between cards in the same visual row
+ * could round them into different buckets, fragmenting the row.
+ *
+ * Now we sort by top and walk sequentially: if the gap to the previous item
+ * exceeds a threshold, start a new row. This is robust to pixel-level noise
+ * from badges ("Live", "Ad") and sub-pixel rendering.
  */
 function buildRows(items, rects, _rowBreakPx) {
   if (items.length === 0) return []
 
+  // 1. Separate shelf items from flat-grid items.
   const shelfMap = new Map()
   const flat = []
 
@@ -161,7 +168,11 @@ function buildRows(items, rects, _rowBreakPx) {
     }
   }
 
-  let rowStep = 200
+  // 2. Compute clustering threshold from median item height.
+  // Items in the same row share approximately the same top. Items in different
+  // rows are separated by at least one row of title/meta text, which is
+  // roughly equal to (or larger than) the thumbnail height.
+  let clusterGap = 100
   if (flat.length > 0) {
     const heights = flat
       .map((el) => rects.get(el)?.height ?? 0)
@@ -169,31 +180,55 @@ function buildRows(items, rects, _rowBreakPx) {
       .sort((a, b) => a - b)
     if (heights.length > 0) {
       const median = heights[Math.floor(heights.length / 2)]
-      rowStep = Math.max(120, median * 0.5)
+      // Gap threshold: half the median height. Items within this distance
+      // vertically count as the same row. Noise from badges is typically
+      // under 20px, so a threshold of 80-100px is safe.
+      clusterGap = Math.max(60, median * 0.5)
     }
   }
 
-  const flatRowMap = new Map()
-  for (const el of flat) {
+  // 3. Sort flat items by top (tie-break by left), then cluster sequentially.
+  const sortedFlat = [...flat].sort((a, b) => {
+    const ar = rects.get(a) ?? { top: 0, left: 0 }
+    const br = rects.get(b) ?? { top: 0, left: 0 }
+    const dt = ar.top - br.top
+    if (Math.abs(dt) < 1) return ar.left - br.left
+    return dt
+  })
+
+  const flatRows = []
+  let currentRow = []
+  let currentRowTop = -Infinity
+
+  for (const el of sortedFlat) {
     const top = rects.get(el)?.top ?? 0
-    const key = Math.round(top / rowStep)
-    if (!flatRowMap.has(key)) flatRowMap.set(key, [])
-    flatRowMap.get(key).push(el)
+    if (currentRow.length === 0 || top - currentRowTop < clusterGap) {
+      currentRow.push(el)
+      // Row top is the minimum top seen so far in the row (anchor).
+      if (currentRow.length === 1) currentRowTop = top
+      // Do NOT update currentRowTop on subsequent items — keep it as the row anchor.
+    } else {
+      // Gap too big → start new row.
+      flatRows.push(currentRow)
+      currentRow = [el]
+      currentRowTop = top
+    }
+  }
+  if (currentRow.length > 0) flatRows.push(currentRow)
+
+  // 4. Sort items within each row by left.
+  for (const row of flatRows) {
+    row.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
   }
 
-  const flatRows = [...flatRowMap.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([, rowItems]) => {
-      rowItems.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
-      return rowItems
-    })
-
+  // 5. Shelf rows: sort by left within each shelf.
   const shelfRows = []
   for (const rowItems of shelfMap.values()) {
     rowItems.sort((a, b) => (rects.get(a)?.left ?? 0) - (rects.get(b)?.left ?? 0))
     shelfRows.push(rowItems)
   }
 
+  // 6. Combine and sort all rows by visual order (min top, tie-break min left).
   const allRows = [...flatRows, ...shelfRows]
   allRows.sort((a, b) => compareRowsByVisualOrder(a, b, rects))
   return allRows

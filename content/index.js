@@ -64,6 +64,8 @@ class NodexContentScript {
     this._frameCount       = 0
     this._destroyed        = false
     this._calibrating      = false
+    this._tutorialMode     = false
+    this._tutorialModeDeadline = 0
 
     this._playerGestureMap = null
     this._browseGestureMap = null
@@ -108,7 +110,6 @@ class NodexContentScript {
       baseline:   calibration,
       onCommand:  (cmd, gesture, metrics) => this._handleCommand(cmd, gesture, metrics),
       onMetrics:  (metrics) => this._handleMetrics(metrics),
-      onCalibrationRequest: () => this._startInlineCalibration(),
     })
 
     window.addEventListener('message', this._onWindowMessage)
@@ -124,7 +125,14 @@ class NodexContentScript {
   }
 
   async start() {
-    if (this._running || this._destroyed) return
+    if (this._destroyed) return
+    // If engine is already running, still broadcast status so any newly-opened
+    // side panel can sync its UI state. Without this, Step 2 of onboarding
+    // hangs on "waiting" for 10 seconds and times out.
+    if (this._running) {
+      this._sendStatus()
+      return
+    }
     this._running = true
 
     window.postMessage({
@@ -140,7 +148,11 @@ class NodexContentScript {
   }
 
   async stop() {
-    if (!this._running) return
+    if (this._destroyed) return
+    if (!this._running) {
+      this._sendStatus()
+      return
+    }
     this._stopWatchdog()
     this._running = false
 
@@ -290,8 +302,26 @@ class NodexContentScript {
   }
 
   _handleCommand(cmd, gesture, metrics) {
+    if (this._tutorialMode && Date.now() > this._tutorialModeDeadline) {
+      this._tutorialMode = false
+    }
     if (document.visibilityState === 'hidden') return
     if (cmd === COMMANDS.NONE) return
+
+    // Tutorial mode: notify side panel so checkmarks work, but NEVER execute command.
+    // This prevents real YouTube video from reacting while user is practicing gestures.
+    if (this._tutorialMode) {
+      this._sendToSidePanel({
+        type: MSG.COMMAND_EXECUTED,
+        command: cmd,
+        gesture,
+        applied: false,
+        metrics,
+        browseMode: this._browseMode,
+        tutorial: true,
+      })
+      return
+    }
 
     let applied = false
 
@@ -356,6 +386,15 @@ class NodexContentScript {
 
       case MSG.CALIBRATION_START:
         this._gestureEngine?.updateSettings({ blocked: true })
+        break
+
+      case MSG.TUTORIAL_START:
+        this._tutorialMode = true
+        this._tutorialModeDeadline = Date.now() + 5 * 60 * 1000  // max 5 minutes
+        break
+
+      case MSG.TUTORIAL_END:
+        this._tutorialMode = false
         break
 
       case MSG.SAVE_CALIBRATION:
