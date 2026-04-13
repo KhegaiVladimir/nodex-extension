@@ -1,3 +1,5 @@
+import { REFINE_LANDMARKS } from '../constants/mediapipe.js'
+
 // MediaPipe Face Mesh landmark indices used throughout this file.
 // Full map: https://github.com/google/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model_uv_visualization.png
 const NOSE_TIP        = 1
@@ -9,10 +11,27 @@ const RIGHT_EYE_UPPER = 159
 const RIGHT_EYE_LOWER = 145
 const RIGHT_EYE_INNER = 133
 const RIGHT_EYE_OUTER = 33
+/** Secondary vertical pair for 6-point EAR (Sukoi-style), symmetric to the primary lids. */
+const RIGHT_EYE_UPPER_2 = 158
+const RIGHT_EYE_LOWER_2 = 153
 const LEFT_EYE_UPPER  = 386
 const LEFT_EYE_LOWER  = 374
 const LEFT_EYE_INNER  = 362
 const LEFT_EYE_OUTER  = 263
+const LEFT_EYE_UPPER_2 = 385
+const LEFT_EYE_LOWER_2 = 380
+/**
+ * Refined mesh only (`refineLandmarks: true`). Full iris ring (MediaPipe Face Mesh):
+ * R: top 470, bottom 472, left 471, right 469 — L: top 475, bottom 477, left 476, right 474.
+ */
+const RIGHT_IRIS_TOP    = 470
+const RIGHT_IRIS_BOTTOM = 472
+const RIGHT_IRIS_LEFT   = 471
+const RIGHT_IRIS_RIGHT  = 469
+const LEFT_IRIS_TOP     = 475
+const LEFT_IRIS_BOTTOM  = 477
+const LEFT_IRIS_LEFT    = 476
+const LEFT_IRIS_RIGHT   = 474
 const UPPER_LIP       = 13
 const LOWER_LIP       = 14
 const MOUTH_LEFT      = 78
@@ -103,13 +122,12 @@ export function computeRoll(lm) {
 }
 
 /**
- * computeEAR — Eye Aspect Ratio, averaged across both eyes.
+ * computeEAR — 6-point Eye Aspect Ratio (Sukoi EAR), averaged across both eyes.
  *
- * Per eye: vertical distance (upper–lower lid) / horizontal distance
- * (inner–outer corner). Typical values: ~0.25–0.35 open, <0.18 closed.
+ * Per eye: mean of two vertical spans (primary + secondary lid pairs) divided by
+ * horizontal (inner–outer). Typical values: ~0.25–0.35 open, lower when closed.
  *
- * Right eye landmarks: 159 (upper), 145 (lower), 133 (inner), 33 (outer).
- * Left eye landmarks:  386 (upper), 374 (lower), 362 (inner), 263 (outer).
+ * Right eye: 159/145, 158/153, 133/33. Left eye: 386/374, 385/380, 362/263.
  *
  * @param {Array<{x:number, y:number, z:number}>} lm - 468 landmarks
  * @returns {number|null} ratio (lower = more closed), or `null` if landmarks are unusable
@@ -118,17 +136,73 @@ export function computeEAR(lm) {
   if (!lm?.length) return null
 
   const rU = lm[RIGHT_EYE_UPPER], rL = lm[RIGHT_EYE_LOWER]
+  const rU2 = lm[RIGHT_EYE_UPPER_2], rL2 = lm[RIGHT_EYE_LOWER_2]
   const rI = lm[RIGHT_EYE_INNER], rO = lm[RIGHT_EYE_OUTER]
   const lU = lm[LEFT_EYE_UPPER],  lL = lm[LEFT_EYE_LOWER]
+  const lU2 = lm[LEFT_EYE_UPPER_2], lL2 = lm[LEFT_EYE_LOWER_2]
   const lI = lm[LEFT_EYE_INNER],  lO = lm[LEFT_EYE_OUTER]
 
-  if (!rU || !rL || !rI || !rO || !lU || !lL || !lI || !lO) return null
+  if (
+    !rU || !rL || !rU2 || !rL2 || !rI || !rO ||
+    !lU || !lL || !lU2 || !lL2 || !lI || !lO
+  ) {
+    return null
+  }
 
   const rHoriz = dist(rI, rO)
   const lHoriz = dist(lI, lO)
   if (rHoriz < MIN_SPAN || lHoriz < MIN_SPAN) return null
 
-  return (dist(rU, rL) / rHoriz + dist(lU, lL) / lHoriz) / 2
+  const rVert = (dist(rU, rL) + dist(rU2, rL2)) / 2
+  const lVert = (dist(lU, lL) + dist(lU2, lL2)) / 2
+  return (rVert / rHoriz + lVert / lHoriz) / 2
+}
+
+/**
+ * Iris openness ratio (refined landmarks only). Vertical iris extent divided by eye
+ * horizontal width (outer–inner corner), averaged per eye; then mean of both eyes.
+ * Typical open ~0.05–0.15; closed &lt;0.03.
+ *
+ * @param {Array<{x:number, y:number, z:number}>} lm - 478 landmarks with iris
+ * @returns {number|null} ratio, or `null` if iris points are unavailable
+ */
+export function computeIrisOpenness(lm) {
+  if (!REFINE_LANDMARKS) return null
+  if (!lm?.length || lm.length < 478) return null
+
+  const rIt = lm[RIGHT_IRIS_TOP]
+  const rIb = lm[RIGHT_IRIS_BOTTOM]
+  const rIl = lm[RIGHT_IRIS_LEFT]
+  const rIr = lm[RIGHT_IRIS_RIGHT]
+  const rIo = lm[RIGHT_EYE_OUTER]
+  const rIi = lm[RIGHT_EYE_INNER]
+  const lIt = lm[LEFT_IRIS_TOP]
+  const lIb = lm[LEFT_IRIS_BOTTOM]
+  const lIl = lm[LEFT_IRIS_LEFT]
+  const lIr = lm[LEFT_IRIS_RIGHT]
+  const lIo = lm[LEFT_EYE_OUTER]
+  const lIi = lm[LEFT_EYE_INNER]
+
+  if (
+    !rIt || !rIb || !rIl || !rIr || !rIo || !rIi ||
+    !lIt || !lIb || !lIl || !lIr || !lIo || !lIi
+  ) {
+    return null
+  }
+
+  const rIrisH = dist(rIl, rIr)
+  const lIrisH = dist(lIl, lIr)
+  if (rIrisH < MIN_SPAN || lIrisH < MIN_SPAN) return null
+
+  const rIrisV = dist(rIt, rIb)
+  const lIrisV = dist(lIt, lIb)
+  const rEyeH = dist(rIo, rIi)
+  const lEyeH = dist(lIo, lIi)
+  if (rEyeH < MIN_SPAN || lEyeH < MIN_SPAN) return null
+
+  const rightRatio = rIrisV / rEyeH
+  const leftRatio = lIrisV / lEyeH
+  return (rightRatio + leftRatio) / 2
 }
 
 /**

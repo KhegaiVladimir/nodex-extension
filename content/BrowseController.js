@@ -6,15 +6,19 @@ import { COMMANDS } from '../shared/constants/commands.js'
  * Selectors below match that model; empty grid cells are marked is-empty.
  */
 const PRIMARY_SELECTORS = [
-  // New YouTube layout (2025+): yt-lockup-view-model on home, search, subscriptions
+  // Modern Home feed (most regular videos in many regions).
   'yt-lockup-view-model a.yt-lockup-view-model__content-image',
-  // Legacy layout (if YouTube rolls back / on other pages):
+  // Fallback for yt-lockup-view-model variants where class name may differ.
+  'yt-lockup-view-model a[href*="/watch?v="]',
+  'yt-lockup-view-model a[href^="/shorts/"]',
   'ytd-rich-item-renderer a#thumbnail',
   'ytd-video-renderer a#thumbnail',
   'ytd-compact-video-renderer a#thumbnail',
   'ytd-grid-video-renderer a#thumbnail',
   'ytd-reel-item-renderer a#thumbnail',
   'ytd-rich-grid-media a#thumbnail',
+  // Featured / hero sections on home feed.
+  'ytd-rich-section-renderer a#thumbnail',
 ]
 
 /** Primary path fails on some layouts / before paint — include Shorts (`/shorts/id`). */
@@ -28,14 +32,37 @@ const VERTICAL_SKIP_MS = 1500
 const MUTATION_DEBOUNCE_MS = 800
 const SCROLL_TRACK_MS = 400
 const PERIODIC_SCAN_MS = 5000
-/** Minimum gap between browse movement commands (gestures must not double-step). */
-const BROWSE_COMMAND_COOLDOWN_MS = 880
+/** Minimum gap between browse movement commands (gestures must not double-step).
+ *  Reduced to 700ms (was 880) for snappier navigation. GestureEngine HEAD_LEFT/RIGHT
+ *  cooldown is 350ms, so effective minimum is max(350, 700) = 700ms. */
+const BROWSE_COMMAND_COOLDOWN_MS = 700
+/** Sticky column expires after this idle gap — user paused, intention reset. */
+const STICKY_COLUMN_IDLE_MS = 2500
 
 const OBSERVER_ROOT_SELECTORS = [
   'ytd-rich-grid-renderer',
   'ytd-section-list-renderer',
   'ytd-watch-next-secondary-results-renderer',
 ]
+
+/** Thumbnails inside these hosts are excluded from browse focus and geometric picks. */
+const BLACKLIST_SELECTORS = [
+  'ytd-ad-slot-renderer',
+  'ytd-display-ad-renderer',
+  'ytd-promoted-sparkles-web-renderer',
+  'ytd-movie-renderer',
+  'ytd-in-feed-ad-layout-renderer',
+  'ytd-promoted-video-renderer',
+  'ytd-statement-banner-renderer',
+  'ytd-brand-video-shelf-renderer',
+].join(',')
+
+const PRIMARY_SELECTOR_STRING = PRIMARY_SELECTORS.join(',')
+
+/** Minimum horizontal separation (px, center-to-center) for geometric left/right picks. */
+const GEOM_H_MIN = 20
+/** Minimum vertical separation (px, center-to-center) for geometric up/down picks. */
+const GEOM_V_MIN = 20
 
 /** watch / embed / short URLs — for dedupe on home and in shelves */
 function videoIdFromHref(href) {
@@ -63,13 +90,122 @@ function findBrowseObserverRoot() {
   return document.querySelector('ytd-app') ?? document.body
 }
 
-function isGhostOrAdThumbnail(el) {
+/**
+ * Valid thumbnail for focus: not blacklisted, not empty grid cell, visible rect,
+ * not absurdly far off-screen vertically (beyond 2× viewport height from the visible band).
+ * @param {Element} el
+ */
+function isValidCard(el) {
+  if (!el?.closest) return false
+  if (el.closest(BLACKLIST_SELECTORS)) return false
   const rich = el.closest?.('ytd-rich-item-renderer')
-  if (rich?.hasAttribute?.('is-empty')) return true
-  if (el.closest?.('ytd-ad-slot-renderer, ytd-display-ad-renderer, ytd-promoted-sparkles-web-renderer')) {
-    return true
+  if (rich?.hasAttribute?.('is-empty')) return false
+
+  // Movies / paid content leak through as ytd-rich-item-renderer.
+  // YouTube tags them with yt-badge-shape--commerce (internal marker for
+  // licensed/commercial content). Reliable, locale-independent.
+  if (rich && !el.closest?.('yt-lockup-view-model')) {
+    if (rich.querySelector('.yt-badge-shape--commerce')) return false
   }
-  return false
+
+  const r = el.getBoundingClientRect()
+  if (r.width <= 0 || r.height <= 0) return false
+  const vpH = window.innerHeight
+  if (r.bottom < -2 * vpH || r.top > vpH + 2 * vpH) return false
+  return true
+}
+
+function queryAllValidPrimaryCards() {
+  return [...document.querySelectorAll(PRIMARY_SELECTOR_STRING)].filter(isValidCard)
+}
+
+/**
+ * Weighted distance: primary axis ×1, orthogonal ×3 (horizontal move → vertical penalized 3×).
+ * @param {number} dx
+ * @param {number} dy
+ * @param {boolean} horizontalPrimary
+ */
+function weightedStepScore(dx, dy, horizontalPrimary) {
+  if (horizontalPrimary) {
+    return Math.hypot(dx, 3 * dy)
+  }
+  return Math.hypot(3 * dx, dy)
+}
+
+/**
+ * Closest valid primary card to anchor center (self-heal when focus node is stale/blacklisted).
+ * @param {DOMRect | { left: number, top: number, width: number, height: number } | null} anchorRect
+ * @returns {Element | null}
+ */
+function geometricNearestAnchor(anchorRect) {
+  if (!anchorRect) return null
+  const w = anchorRect.width ?? 0
+  const h = anchorRect.height ?? 0
+  const cx = anchorRect.left + (w > 0 ? w / 2 : 0)
+  const cy = anchorRect.top + (h > 0 ? h / 2 : 0)
+  const candidates = queryAllValidPrimaryCards()
+  let best = null
+  let bestD = Infinity
+  for (const el of candidates) {
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) continue
+    const ox = r.left + r.width / 2
+    const oy = r.top + r.height / 2
+    const d = Math.hypot(ox - cx, oy - cy)
+    if (d < bestD) {
+      bestD = d
+      best = el
+    }
+  }
+  return best
+}
+
+/**
+ * Next card in a direction when row/shelf structure fails (weighted 3:1 orthogonal penalty).
+ * @param {DOMRect | { left: number, top: number, width: number, height: number } | null} anchorRect
+ * @param {'right' | 'left' | 'up' | 'down'} direction
+ * @param {Element | null} excludeEl
+ * @returns {Element | null}
+ */
+function geometricNeighborFromRect(anchorRect, direction, excludeEl = null) {
+  if (!anchorRect) return null
+  const w = anchorRect.width ?? 0
+  const h = anchorRect.height ?? 0
+  const cx = anchorRect.left + (w > 0 ? w / 2 : 0)
+  const cy = anchorRect.top + (h > 0 ? h / 2 : 0)
+  const candidates = queryAllValidPrimaryCards()
+  let best = null
+  let bestScore = Infinity
+  for (const el of candidates) {
+    if (excludeEl && el === excludeEl) continue
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) continue
+    const ox = r.left + r.width / 2
+    const oy = r.top + r.height / 2
+    const dx = ox - cx
+    const dy = oy - cy
+    let score = Infinity
+    if (direction === 'right') {
+      if (dx <= GEOM_H_MIN) continue
+      score = weightedStepScore(dx, dy, true)
+    } else if (direction === 'left') {
+      if (dx >= -GEOM_H_MIN) continue
+      score = weightedStepScore(dx, dy, true)
+    } else if (direction === 'up') {
+      if (dy >= -GEOM_V_MIN) continue
+      score = weightedStepScore(dx, dy, false)
+    } else if (direction === 'down') {
+      if (dy <= GEOM_V_MIN) continue
+      score = weightedStepScore(dx, dy, false)
+    } else {
+      continue
+    }
+    if (score < bestScore) {
+      bestScore = score
+      best = el
+    }
+  }
+  return best
 }
 
 /** One thumbnail per video — duplicate anchors (e.g. hover preview + main) confuse order. */
@@ -168,22 +304,23 @@ function buildRows(items, rects, _rowBreakPx) {
     }
   }
 
-  // 2. Compute clustering threshold from median item height.
-  // Items in the same row share approximately the same top. Items in different
-  // rows are separated by at least one row of title/meta text, which is
-  // roughly equal to (or larger than) the thumbnail height.
+  // 2. Compute clustering threshold from median item height (real tiles only).
+  // Placeholder skeletons (~50–80px) and h=0 must not pollute median during lazy load.
+  const CLUSTER_GAP_FALLBACK_PX = 200
   let clusterGap = 100
   if (flat.length > 0) {
     const heights = flat
       .map((el) => rects.get(el)?.height ?? 0)
-      .filter((h) => h > 40)
+      .filter((h) => h > 100)
       .sort((a, b) => a - b)
-    if (heights.length > 0) {
+    if (heights.length >= 3) {
       const median = heights[Math.floor(heights.length / 2)]
       // Gap threshold: half the median height. Items within this distance
       // vertically count as the same row. Noise from badges is typically
       // under 20px, so a threshold of 80-100px is safe.
       clusterGap = Math.max(60, median * 0.5)
+    } else {
+      clusterGap = CLUSTER_GAP_FALLBACK_PX
     }
   }
 
@@ -236,6 +373,9 @@ function buildRows(items, rects, _rowBreakPx) {
 
 export class BrowseController {
   constructor() {
+    /** @type {AbortController} */
+    this._ac = new AbortController()
+    this._destroyed = false
     this._focusIndex = -1
     this._focusedElement = null
     this._focusRing = null
@@ -258,33 +398,51 @@ export class BrowseController {
     this._onBrowseResize = null
     /** @type {((e: Event) => void) | null} */
     this._onBrowsePageShow = null
+    /** @type {(() => void) | null} */
+    this._onYtNavigateFinish = null
+    /** Last drawn focus rect (for self-heal when DOM swaps to blacklisted nodes). */
+    this._lastFocusRect = null
+    /** Sticky column X (viewport coords) held across consecutive vertical moves. */
+    this._stickyColumnX = null
+    /** Timestamp when sticky column was last set or used, for idle expiration. */
+    this._stickyColumnAt = 0
+    /** Card container element that currently has scale(1.05) applied. */
+    this._scaledEl = null
+    /** Source <a> thumbnail for which _scaledEl was last computed — skip closest() on repeat calls. */
+    this._scaledElSource = null
+
+    if (typeof window !== 'undefined') window.__nodexBrowseController = this
   }
 
   activate() {
+    if (this._destroyed) return 0
     this.deactivate()
     this._ensureFocusRing()
     this._scanItems()
     this._focusFirstVisible()
 
     this._observer = new MutationObserver(() => {
+      if (this._destroyed) return
       clearTimeout(this._mutationDebounce)
       this._mutationDebounce = setTimeout(() => {
         this._mutationDebounce = null
+        if (this._destroyed) return
         this._scanItems()
       }, MUTATION_DEBOUNCE_MS)
     })
 
     const container = findBrowseObserverRoot()
     this._observer.observe(container, { subtree: true, childList: true })
-    window.addEventListener('scroll', this._onScroll, { passive: true })
+    window.addEventListener('scroll', this._onScroll, { passive: true, signal: this._ac.signal })
 
     this._onBrowseResize = () => {
       this._ensureFocusRing()
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
     }
-    window.addEventListener('resize', this._onBrowseResize, { passive: true })
+    window.addEventListener('resize', this._onBrowseResize, { passive: true, signal: this._ac.signal })
 
     this._onBrowsePageShow = (e) => {
+      if (this._destroyed) return
       // bfcache: ring was detached from the frozen document; force recreate.
       if (e.persisted) this._focusRing = null
       this._ensureFocusRing()
@@ -292,9 +450,20 @@ export class BrowseController {
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
       else if (this._currentItems.length > 0) this._focusFirstVisible()
     }
-    window.addEventListener('pageshow', this._onBrowsePageShow)
+    window.addEventListener('pageshow', this._onBrowsePageShow, { signal: this._ac.signal })
+
+    this._onYtNavigateFinish = () => {
+      if (this._destroyed) return
+      this._focusRing = null
+      this._ensureFocusRing()
+      this._scanItems()
+      if (this._currentItems.length > 0 && this._focusIndex < 0) this._focusFirstVisible()
+      else if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
+    }
+    document.addEventListener('yt-navigate-finish', this._onYtNavigateFinish, { signal: this._ac.signal })
 
     this._periodicTimer = setInterval(() => {
+      if (this._destroyed) return
       if (performance.now() - this._lastCommandAt < 1500) return
       this._ensureFocusRing()
       this._scanItems()
@@ -317,6 +486,7 @@ export class BrowseController {
    * the feed may have swapped DOM nodes while browse mode stayed active.
    */
   refreshIfActive() {
+    if (this._destroyed) return
     this._ensureFocusRing()
     this._scanItems()
     if (this._focusIndex < 0 && this._currentItems.length > 0) {
@@ -327,28 +497,55 @@ export class BrowseController {
   }
 
   deactivate() {
+    if (this._destroyed) return
+    this._teardownBrowseSession({ permanent: false })
+  }
+
+  /**
+   * Permanently tears down this controller: aborts window listeners, disconnects observers,
+   * removes the focus ring, and blocks further DOM work.
+   */
+  destroy() {
+    if (this._destroyed) return
+    if (typeof window !== 'undefined' && window.__nodexBrowseController === this) {
+      window.__nodexBrowseController = null
+    }
+    this._destroyed = true
+    this._teardownBrowseSession({ permanent: true })
+  }
+
+  /**
+   * @param {{ permanent: boolean }} opts permanent: true when destroying (do not allocate a new AbortController).
+   */
+  _teardownBrowseSession({ permanent }) {
     clearTimeout(this._mutationDebounce)
     this._mutationDebounce = null
     clearTimeout(this._retryTimer)
+    this._retryTimer = null
     clearTimeout(this._scrollTrackTimer)
+    this._scrollTrackTimer = null
     clearInterval(this._periodicTimer)
+    this._periodicTimer = null
     cancelAnimationFrame(this._scrollRaf)
+    this._scrollRaf = null
     this._observer?.disconnect()
     this._observer = null
-    window.removeEventListener('scroll', this._onScroll)
-    if (this._onBrowseResize) {
-      window.removeEventListener('resize', this._onBrowseResize)
-      this._onBrowseResize = null
+
+    this._ac.abort()
+    if (!permanent) {
+      this._ac = new AbortController()
     }
-    if (this._onBrowsePageShow) {
-      window.removeEventListener('pageshow', this._onBrowsePageShow)
-      this._onBrowsePageShow = null
-    }
+
+    this._onBrowseResize = null
+    this._onBrowsePageShow = null
+    this._onYtNavigateFinish = null
 
     if (this._focusRing) {
       this._focusRing.remove()
       this._focusRing = null
     }
+    this._scaledElSource = null
+    this._applyCardScale(null)
 
     this._focusIndex = -1
     this._focusedElement = null
@@ -359,12 +556,78 @@ export class BrowseController {
     this._itemListSignature = null
     this._lastVerticalCmdAt = 0
     this._lastVerticalDirection = 0
+    this._lastFocusRect = null
+    this._resetStickyColumn()
+  }
+
+  /** Selector for the card container to which scale is applied (not the <a> itself). */
+  static CARD_CONTAINER_SEL = [
+    'ytd-rich-item-renderer',
+    'yt-lockup-view-model',
+    'ytd-video-renderer',
+    'ytd-compact-video-renderer',
+    'ytd-grid-video-renderer',
+    'ytd-reel-item-renderer',
+  ].join(',')
+
+  /**
+   * Applies scale(1.05) to the card container wrapping `el`, removes it from the
+   * previous container. Pass null to only remove.
+   * @param {Element|null} el
+   */
+  _applyCardScale(el) {
+    // Fast path: same source element → container unchanged, skip DOM traversal.
+    if (el === this._scaledElSource) return
+    this._scaledElSource = el
+    const container = el ? (el.closest(BrowseController.CARD_CONTAINER_SEL) ?? el) : null
+    if (container === this._scaledEl) return
+    if (this._scaledEl) {
+      this._scaledEl.style.transform = ''
+      this._scaledEl.style.transition = ''
+      this._scaledEl.style.zIndex = ''
+      this._scaledEl.style.position = ''
+      this._scaledEl = null
+    }
+    if (container) {
+      container.style.position = 'relative'
+      container.style.zIndex = '1'
+      container.style.transition = 'transform 0.2s ease-out'
+      container.style.transform = 'scale(1.05)'
+      this._scaledEl = container
+    }
+  }
+
+  /**
+   * Brief red pulse on the focus ring to signal "edge reached" — no animation library needed.
+   */
+  _pulseEdge() {
+    const ring = this._focusRing
+    if (!ring || ring.style.display === 'none') return
+    ring.style.transition = 'border-color 0.08s ease-out, box-shadow 0.08s ease-out'
+    ring.style.borderColor = '#ff4444'
+    ring.style.boxShadow = '0 0 0 4px rgba(255, 68, 68, 0.35)'
+    setTimeout(() => {
+      if (!this._focusRing || this._destroyed) return
+      ring.style.borderColor = '#64FFDA'
+      ring.style.boxShadow = '0 0 0 4px rgba(100, 255, 218, 0.2)'
+      setTimeout(() => {
+        if (!this._focusRing || this._destroyed) return
+        ring.style.transition = 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out'
+      }, 180)
+    }, 120)
+  }
+
+  /** Clears vertical sticky-column anchor (horizontal move or focus bootstrap). */
+  _resetStickyColumn() {
+    this._stickyColumnX = null
+    this._stickyColumnAt = 0
   }
 
   /**
    * @returns {boolean|'edge'} true if applied, 'edge' if at boundary, false if no items
    */
   execute(command) {
+    if (this._destroyed) return false
     if (document.querySelector('.ad-showing')) return false
 
     const isMovement =
@@ -415,15 +678,29 @@ export class BrowseController {
    * keeping our JS reference — otherwise _createFocusRing would no-op forever.
    */
   _ensureFocusRing() {
-    if (this._focusRing && !this._focusRing.isConnected) {
-      this._focusRing = null
+    if (this._focusRing) {
+      const ring = this._focusRing
+      const detached =
+        !ring.isConnected ||
+        ring.ownerDocument !== document ||
+        (document.body != null && !document.body.contains(ring))
+      if (detached) {
+        this._focusRing = null
+      }
     }
     this._createFocusRing()
   }
 
   _createFocusRing() {
-    if (this._focusRing?.isConnected) return
-    if (this._focusRing && !this._focusRing.isConnected) {
+    if (this._focusRing) {
+      const ring = this._focusRing
+      if (
+        ring.isConnected &&
+        ring.ownerDocument === document &&
+        (document.body == null || document.body.contains(ring))
+      ) {
+        return
+      }
       this._focusRing = null
     }
     const ring = document.createElement('div')
@@ -433,10 +710,10 @@ export class BrowseController {
       position: 'fixed',
       pointerEvents: 'none',
       zIndex: '2147483647',
-      border: '3px solid #00e5ff',
+      border: '3px solid #64FFDA',
       borderRadius: '12px',
-      boxShadow: '0 0 0 4px rgba(0, 229, 255, 0.2)',
-      transition: 'top 0.15s ease, left 0.15s ease, width 0.15s ease, height 0.15s ease',
+      boxShadow: '0 0 0 4px rgba(100, 255, 218, 0.2)',
+      transition: 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out',
       display: 'none',
     })
     const root = document.body || document.documentElement
@@ -446,6 +723,7 @@ export class BrowseController {
 
   _focusFirstVisible() {
     if (this._currentItems.length === 0) return
+    this._resetStickyColumn()
     const vpH = window.innerHeight
     const tol = ROW_SORT_TOL_PX
     let bestIdx = -1
@@ -480,6 +758,7 @@ export class BrowseController {
     clearTimeout(this._retryTimer)
     let attempts = 0
     const retry = () => {
+      if (this._destroyed) return
       attempts++
       this._scanItems()
       if (this._currentItems.length > 0) {
@@ -492,15 +771,16 @@ export class BrowseController {
   }
 
   _scanItems() {
+    if (this._destroyed) return
     this._lastScanTime = Date.now()
 
-    let items = this._queryVisibleItems(PRIMARY_SELECTORS.join(','))
-      .filter((el) => !isGhostOrAdThumbnail(el))
+    let items = this._queryVisibleItems(PRIMARY_SELECTOR_STRING)
+      .filter((el) => isValidCard(el))
 
     if (items.length === 0) {
       items = this._queryVisibleItems(FALLBACK_SELECTOR)
         .filter((el) => {
-          if (isGhostOrAdThumbnail(el)) return false
+          if (!isValidCard(el)) return false
           if (el.closest('ytd-playlist-renderer, #masthead')) return false
           if (el.href?.includes('&list=')) return false
           const r = el.getBoundingClientRect()
@@ -515,14 +795,22 @@ export class BrowseController {
       this._focusedElement = null
       this._focusedHref = null
       this._itemListSignature = null
+      this._resetStickyColumn()
       if (this._focusRing) this._focusRing.style.display = 'none'
       return
     }
+
+    // Temporarily remove scale so the focused element's rect is unscaled for row/column math.
+    // scale(1.05) shifts top/left by ~2–5 px which can misplace the item into the wrong row.
+    const scaledTransform = this._scaledEl?.style.transform ?? ''
+    if (this._scaledEl) this._scaledEl.style.transform = ''
 
     const rects = new Map()
     for (const el of items) {
       rects.set(el, el.getBoundingClientRect())
     }
+
+    if (this._scaledEl) this._scaledEl.style.transform = scaledTransform
 
     items = dedupeThumbnails(items, rects)
     this._rows = buildRows(items, rects, ROW_BREAK_PX)
@@ -599,6 +887,75 @@ export class BrowseController {
     })
   }
 
+  /**
+   * If the focused thumbnail is missing or blacklisted after DOM churn, snap to the nearest valid card.
+   * @returns {boolean} true if focus was reassigned
+   */
+  _selfHealInvalidFocusIfNeeded() {
+    if (this._destroyed) return false
+    const cur = this._currentItems[this._focusIndex]
+    if (cur?.isConnected && isValidCard(cur)) return false
+
+    let anchor = null
+    if (this._lastFocusRect) {
+      anchor = { ...this._lastFocusRect }
+    } else if (cur?.isConnected) {
+      anchor = cur.getBoundingClientRect()
+    }
+
+    const healed = geometricNearestAnchor(anchor)
+    if (!healed) return false
+
+    this._scanItems()
+    const idx = this._currentItems.indexOf(healed)
+    if (idx < 0) return false
+    this._setFocus(idx)
+    return true
+  }
+
+  /**
+   * @param {'right' | 'left' | 'up' | 'down'} directionLabel
+   * @param {Element | null | undefined} fromEl
+   * @returns {boolean}
+   */
+  _applyGeometricFocus(nextEl, directionLabel, fromEl) {
+    this._scanItems()
+    let idx = this._currentItems.indexOf(nextEl)
+    if (idx < 0) {
+      this._scanItems()
+      idx = this._currentItems.indexOf(nextEl)
+    }
+    if (idx < 0) return false
+
+    this._setFocus(idx)
+    const r = nextEl.getBoundingClientRect()
+    const vpH = window.innerHeight
+    const vpW = window.innerWidth
+    const fullyVisible =
+      r.top >= 0 && r.bottom <= vpH && r.left >= 0 && r.right <= vpW
+    if (!fullyVisible) {
+      nextEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    }
+    this._trackScrollPosition()
+    console.warn('[Nodex] browse fallback:', directionLabel, 'from', fromEl, 'to', nextEl)
+    return true
+  }
+
+  /**
+   * @param {number} direction -1 up, +1 down
+   */
+  _tryGeometricVerticalMove(direction, current) {
+    const dirLabel = direction < 0 ? 'up' : 'down'
+    const anchor = current?.isConnected
+      ? current.getBoundingClientRect()
+      : this._lastFocusRect
+        ? { ...this._lastFocusRect }
+        : null
+    const nextEl = geometricNeighborFromRect(anchor, dirLabel, current ?? null)
+    if (!nextEl) return false
+    return this._applyGeometricFocus(nextEl, dirLabel, current)
+  }
+
   _findRowCol() {
     let synced = false
 
@@ -631,18 +988,36 @@ export class BrowseController {
   }
 
   _moveFocus(delta, shelfScrollAttempt = 0) {
+    if (this._destroyed) return false
+    // Horizontal move → user chose new column → drop sticky anchor.
+    this._resetStickyColumn()
+    this._scanItems()
     if (this._rows.length === 0 || this._currentItems.length === 0) return false
 
+    this._selfHealInvalidFocusIfNeeded()
+
+    const dirLabel = delta > 0 ? 'right' : 'left'
     let rc = this._findRowCol()
     if (!rc) {
       this._scanItems()
       rc = this._findRowCol()
     }
-    if (!rc) return false
+
+    const current = this._currentItems[this._focusIndex]
+    const anchorForGeom = current?.isConnected
+      ? current.getBoundingClientRect()
+      : this._lastFocusRect
+        ? { ...this._lastFocusRect }
+        : null
+
+    if (!rc) {
+      const nextEl = geometricNeighborFromRect(anchorForGeom, dirLabel, current ?? null)
+      if (nextEl && this._applyGeometricFocus(nextEl, dirLabel, current)) return true
+      return false
+    }
 
     const { rowIdx, colIdx } = rc
     const row = this._rows[rowIdx]
-    const current = this._currentItems[this._focusIndex]
     const newCol = colIdx + delta
     if (newCol < 0 || newCol >= row.length) {
       const shelf = current?.closest?.('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer')
@@ -654,24 +1029,37 @@ export class BrowseController {
           const dir = delta > 0 ? 1 : -1
           container.scrollBy({ left: dir * 300, behavior: 'smooth' })
           setTimeout(() => {
+            if (this._destroyed) return
             this._scanItems()
             this._moveFocus(delta, shelfScrollAttempt + 1)
           }, 500)
           return true
         }
+        // Shelf without a scrollable container — fall through to geometric fallback (same as no shelf).
       }
+      const nextEl = geometricNeighborFromRect(anchorForGeom, dirLabel, current ?? null)
+      if (nextEl && this._applyGeometricFocus(nextEl, dirLabel, current)) return true
+      this._pulseEdge()
       return 'edge'
     }
 
     const target = row[newCol]
-    if (!target?.isConnected) {
+    if (!target?.isConnected || !isValidCard(target)) {
       this._scanItems()
+      const nextEl = geometricNeighborFromRect(anchorForGeom, dirLabel, current ?? null)
+      if (nextEl && this._applyGeometricFocus(nextEl, dirLabel, current)) return true
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
+      this._pulseEdge()
       return 'edge'
     }
 
     const newIdx = this._currentItems.indexOf(target)
-    if (newIdx < 0) return 'edge'
+    if (newIdx < 0) {
+      const nextEl = geometricNeighborFromRect(anchorForGeom, dirLabel, current ?? null)
+      if (nextEl && this._applyGeometricFocus(nextEl, dirLabel, current)) return true
+      this._pulseEdge()
+      return 'edge'
+    }
 
     this._setFocus(newIdx)
     const r = target.getBoundingClientRect()
@@ -688,11 +1076,20 @@ export class BrowseController {
   }
 
   _moveFocusVertical(direction, scrollDepth = 0) {
-    if (this._rows.length === 0 || this._focusIndex < 0) return false
+    if (this._destroyed) return false
+    this._scanItems()
+    this._selfHealInvalidFocusIfNeeded()
+    this._scanItems()
+
+    if (this._rows.length === 0 || this._focusIndex < 0) {
+      if (this._tryGeometricVerticalMove(direction, null)) return true
+      return false
+    }
 
     const current = this._currentItems[this._focusIndex]
     if (!current?.isConnected) {
       this._scanItems()
+      if (this._tryGeometricVerticalMove(direction, current)) return true
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
       return 'edge'
     }
@@ -702,11 +1099,24 @@ export class BrowseController {
       this._scanItems()
       curRowIdx = this._rows.findIndex((row) => row.includes(current))
     }
-    if (curRowIdx < 0) return false
+    if (curRowIdx < 0) {
+      if (this._tryGeometricVerticalMove(direction, current)) return true
+      return false
+    }
 
     const rect = current.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
     const now = performance.now()
+
+    // Sticky column: first vertical in a series captures the intention X.
+    // Subsequent verticals within idle window reuse it, so down-down-down
+    // stays in the same visual column even if target cards aren't perfectly aligned.
+    const stickyExpired = now - this._stickyColumnAt > STICKY_COLUMN_IDLE_MS
+    if (this._stickyColumnX === null || stickyExpired) {
+      this._stickyColumnX = rect.left + rect.width / 2
+    }
+    this._stickyColumnAt = now
+    const centerX = this._stickyColumnX
+
     const inShelf = Boolean(
       current.closest('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer'),
     )
@@ -756,6 +1166,7 @@ export class BrowseController {
       if (scrollDepth >= 1) return false
       window.scrollBy({ top: direction * 600, behavior: 'smooth' })
       setTimeout(() => {
+        if (this._destroyed) return
         this._scanItems()
         this._moveFocusVertical(direction, scrollDepth + 1)
       }, 700)
@@ -765,16 +1176,23 @@ export class BrowseController {
     if (inShelf) {
       const targetRowIdx = findNearestNonShelfIdx(curRowIdx, direction)
       if (targetRowIdx < 0) {
-        return tryPageScrollRetry() ? true : 'edge'
+        if (tryPageScrollRetry()) return true
+        if (this._tryGeometricVerticalMove(direction, current)) return true
+        return 'edge'
       }
       const closest = pickClosestInRow(targetRowIdx)
-      if (!closest) return 'edge'
+      if (!closest) {
+        if (this._tryGeometricVerticalMove(direction, current)) return true
+        return 'edge'
+      }
       return applyVerticalFocus(closest) ? true : 'edge'
     }
 
     let t = curRowIdx + direction
     if (t < 0 || t >= this._rows.length) {
-      return tryPageScrollRetry() ? true : 'edge'
+      if (tryPageScrollRetry()) return true
+      if (this._tryGeometricVerticalMove(direction, current)) return true
+      return 'edge'
     }
 
     if (isShelfRow(this._rows[t])) {
@@ -786,17 +1204,25 @@ export class BrowseController {
           t += direction
         }
         if (t < 0 || t >= this._rows.length) {
-          return tryPageScrollRetry() ? true : 'edge'
+          if (tryPageScrollRetry()) return true
+          if (this._tryGeometricVerticalMove(direction, current)) return true
+          return 'edge'
         }
       } else {
         const closest = pickClosestInRow(t)
-        if (!closest) return 'edge'
+        if (!closest) {
+          if (this._tryGeometricVerticalMove(direction, current)) return true
+          return 'edge'
+        }
         return applyVerticalFocus(closest) ? true : 'edge'
       }
     }
 
     const closest = pickClosestInRow(t)
-    if (!closest) return 'edge'
+    if (!closest) {
+      if (this._tryGeometricVerticalMove(direction, current)) return true
+      return 'edge'
+    }
     return applyVerticalFocus(closest) ? true : 'edge'
   }
 
@@ -808,11 +1234,13 @@ export class BrowseController {
   }
 
   _highlightItem(index) {
+    if (this._destroyed) return
     this._ensureFocusRing()
     this._focusIndex = index
     const el = this._currentItems[index]
     if (!el || !el.isConnected) {
       if (this._focusRing) this._focusRing.style.display = 'none'
+      this._applyCardScale(null)
       return
     }
     const applyRect = (r) => {
@@ -826,23 +1254,48 @@ export class BrowseController {
       })
     }
 
+    this._applyCardScale(el)
     const rect = el.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) {
       requestAnimationFrame(() => {
-        if (!el.isConnected) return
+        if (this._destroyed || !el.isConnected) return
         const r2 = el.getBoundingClientRect()
-        if (r2.width > 0 && r2.height > 0) applyRect(r2)
-        else if (this._focusRing) this._focusRing.style.display = 'none'
+        if (r2.width > 0 && r2.height > 0) {
+          applyRect(r2)
+          if (isValidCard(el)) {
+            this._lastFocusRect = {
+              left: r2.left,
+              top: r2.top,
+              right: r2.right,
+              bottom: r2.bottom,
+              width: r2.width,
+              height: r2.height,
+            }
+          }
+        } else if (this._focusRing) {
+          this._focusRing.style.display = 'none'
+        }
       })
       return
     }
     applyRect(rect)
+    if (el.isConnected && isValidCard(el)) {
+      this._lastFocusRect = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      }
+    }
   }
 
   _trackScrollPosition() {
     clearTimeout(this._scrollTrackTimer)
     const start = Date.now()
     const tick = () => {
+      if (this._destroyed) return
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
       if (Date.now() - start < SCROLL_TRACK_MS) {
         this._scrollTrackTimer = setTimeout(tick, 16)
@@ -852,8 +1305,20 @@ export class BrowseController {
   }
 
   _selectCurrent() {
-    if (this._focusIndex < 0 || !this._currentItems[this._focusIndex]) return false
+    if (this._focusIndex < 0) return false
     const el = this._currentItems[this._focusIndex]
+    if (!el) return false
+    if (!el.isConnected || !isValidCard(el)) {
+      this._selfHealInvalidFocusIfNeeded()
+      return false
+    }
+    const r = el.getBoundingClientRect()
+    const vpH = window.innerHeight
+    const vpW = window.innerWidth
+    if (r.bottom < 0 || r.top > vpH || r.right < 0 || r.left > vpW) {
+      this._focusFirstVisible()
+      return false
+    }
 
     if (el.href) {
       window.location.href = el.href
@@ -864,9 +1329,11 @@ export class BrowseController {
   }
 
   _handleScroll() {
+    if (this._destroyed) return
     if (this._scrollRaf) return
     this._scrollRaf = requestAnimationFrame(() => {
       this._scrollRaf = null
+      if (this._destroyed) return
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
     })
   }

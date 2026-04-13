@@ -3,90 +3,103 @@ const MSG_SIDEPANEL_TO_CONTENT = 'SIDEPANEL_TO_CONTENT'
 const MSG_REQUEST_STATUS       = 'REQUEST_STATUS'
 const MSG_INJECT_MEDIAPIPE     = 'INJECT_MEDIAPIPE'
 
+// Open side panel automatically when the toolbar icon is clicked.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
 
-// Programmatic injection — the ONLY reliable way to inject into existing tabs.
-// content_scripts in manifest only auto-inject into NEW tabs opened after extension loads.
-// For already-open tabs we must use chrome.scripting.executeScript.
+// ── Script injection ───────────────────────────────────────────────────────
+
+/**
+ * Inject both content worlds into a tab.
+ * Checks both worlds before injecting to avoid duplicate bridge / orphaned MAIN.
+ * Silently ignores tabs that are not injectable (restricted pages, not ready).
+ */
 async function injectIntoTab(tabId) {
   try {
-    // Check if already injected by reading a flag from ISOLATED world
-    const check = await chrome.scripting.executeScript({
+    const [checkIsolated] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => !!window.__nodexLoaded,
     })
-    if (check[0]?.result === true) return
+    const [checkMain] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => !!window.__nodexBridgeLoaded,
+    })
+    // Both worlds already loaded — skip to avoid duplicate listeners.
+    if (checkIsolated?.result === true && checkMain?.result === true) return
 
-    // Inject bridge into MAIN world using world param on the injection object (not target)
+    // MAIN world: MediaPipe bridge
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content/mediapipe-bridge.js'],
       world: 'MAIN',
     })
 
-    // Inject orchestrator into ISOLATED world (default)
+    // ISOLATED world: gesture orchestrator
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['content/index.js'],
     })
-  } catch (e) {
-    // Tab not ready or restricted page — ignore silently
+  } catch (_e) {
+    // Tab not injectable (restricted URL, prerender, etc.) — ignore silently.
   }
 }
 
-// Inject into all open YouTube tabs when extension installs or updates
+// ── Lifecycle hooks ────────────────────────────────────────────────────────
+
+// Inject into all already-open YouTube tabs on install / update.
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
   chrome.tabs.query({ url: 'https://www.youtube.com/*' }, (tabs) => {
-    for (const tab of tabs) injectIntoTab(tab.id)
+    for (const tab of tabs) {
+      if (tab.id != null) injectIntoTab(tab.id)
+    }
   })
 })
 
-// Inject when a tab fully loads a YouTube page
+// Inject when a tab fully loads a YouTube page (real navigation / new tab).
+// SPA transitions are handled in-page via `yt-navigate-finish`.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return
   if (!tab.url?.startsWith('https://www.youtube.com/')) return
   injectIntoTab(tabId)
 })
 
-// Re-inject on YouTube SPA navigation
-chrome.webNavigation.onHistoryStateUpdated.addListener(
-  (details) => {
-    if (!details.url?.startsWith('https://www.youtube.com/')) return
-    setTimeout(() => injectIntoTab(details.tabId), 1500)
-  },
-  { url: [{ hostContains: 'youtube.com' }] },
-)
+// ── Message relay ──────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message?.type) return
 
   switch (message.type) {
 
+    // Content script → side panel (ENGINE_STATUS, METRICS_UPDATE, etc.)
     case MSG_CONTENT_TO_SIDEPANEL:
-      // Relay from content script to side panel (payload carries ENGINE_STATUS, etc.)
       if (message.payload) {
-        chrome.runtime.sendMessage(message.payload).catch(() => {})
+        chrome.runtime.sendMessage({
+          ...message.payload,
+          __sourceTabId: sender.tab?.id,
+        }).catch(() => {})
       }
       sendResponse({ ok: true })
       break
 
+    // Side panel → content script (START_ENGINE, UPDATE_SETTINGS, etc.)
     case MSG_SIDEPANEL_TO_CONTENT:
-      // Relay from side panel to content script (inner carries START_ENGINE, etc.)
       if (message.tabId != null && message.inner) {
         chrome.tabs.sendMessage(message.tabId, message.inner).catch(() => {})
       }
       sendResponse({ ok: true })
       break
 
-    case MSG_REQUEST_STATUS:
-      getActiveYouTubeTabId().then((tabId) => {
-        if (tabId == null) return
+    // Side panel → specific tab: request ENGINE_STATUS
+    case MSG_REQUEST_STATUS: {
+      const tabId = message.tabId
+      if (tabId != null) {
         chrome.tabs.sendMessage(tabId, { type: MSG_REQUEST_STATUS }).catch(() => {})
-      })
+      }
       sendResponse({ ok: true })
       break
+    }
 
+    // MAIN world → service worker: inject MediaPipe scripts into MAIN world
     case MSG_INJECT_MEDIAPIPE: {
       const tabId = sender.tab?.id
       if (tabId == null) {
@@ -103,9 +116,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }))
-      return true
+      return true   // async response
     }
 
+    // MAIN world → service worker: inject a single MediaPipe sub-script (patched loader)
     case 'INJECT_SCRIPT': {
       const tabId = sender.tab?.id
       if (tabId == null) {
@@ -113,8 +127,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break
       }
       const filePath = message.path
-      if (!filePath) {
-        sendResponse({ ok: false, error: 'no file path' })
+      if (!filePath || typeof filePath !== 'string') {
+        sendResponse({ ok: false, error: 'invalid file path' })
         break
       }
       chrome.scripting.executeScript({
@@ -124,7 +138,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }))
-      return true
+      return true   // async response
     }
 
     default:
@@ -132,14 +146,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break
   }
 })
-
-async function getActiveYouTubeTabId() {
-  try {
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' })
-    if (tabs.length > 0) return tabs[0].id
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    return tab?.id ?? null
-  } catch (_e) {
-    return null
-  }
-}

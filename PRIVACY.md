@@ -57,7 +57,6 @@ extension or clear Chrome's extension storage.
 | `sidePanel` | Show the Nodex control panel. |
 | `scripting` | Inject MediaPipe face tracking into YouTube tabs. |
 | `tabs` | Find YouTube tabs to control from the side panel. |
-| `webNavigation` | Detect YouTube SPA navigation to keep gestures working. |
 | `host_permissions: youtube.com` | Access only YouTube pages to control playback and browsing. |
 
 ## Contact
