@@ -58,7 +58,7 @@ Messages only via constants in `shared/constants/messages.js`. Storage is `chrom
 | `shared/constants/defaults.js` | Default thresholds, cooldowns, mapping, constants like EYE_CLOSE_MIN_MS. |
 | `shared/storage.js` | Wrapper over `chrome.storage.local`. |
 | `shared/utils/gestureLogic.js` | yaw/pitch/roll, EAR, mouth ratio. |
-| `shared/utils/thresholds.js` | Sensitivity presets. |
+| `shared/utils/thresholds.js` | Re-exports `DEFAULT_THRESHOLDS` / `SENSITIVITY_PRESETS` from `defaults.js` (single source of truth). |
 | `shared/utils/cooldown.js` | Cooldown class. |
 
 ### Assets

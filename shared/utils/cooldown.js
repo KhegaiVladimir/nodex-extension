@@ -1,7 +1,7 @@
 export class Cooldown {
   constructor(intervalMs) {
-    if (typeof intervalMs !== 'number' || intervalMs < 0) {
-      throw new TypeError('intervalMs must be a non-negative number')
+    if (typeof intervalMs !== 'number' || !Number.isFinite(intervalMs) || intervalMs < 0) {
+      throw new TypeError('intervalMs must be a non-negative finite number')
     }
     this._interval = intervalMs
     this._lastFired = 0
@@ -22,8 +22,8 @@ export class Cooldown {
   }
 
   setInterval(ms) {
-    if (typeof ms !== 'number' || ms < 0) {
-      throw new TypeError('ms must be a non-negative number')
+    if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) {
+      throw new TypeError('ms must be a non-negative finite number')
     }
     this._interval = ms
   }

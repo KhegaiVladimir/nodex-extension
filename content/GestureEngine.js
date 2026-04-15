@@ -58,10 +58,13 @@ const BLINK_MAX_CLOSED_FRAMES = 35
 /**
  * Auto-calibration EMA for open-eye EAR baseline.
  * α = 0.04 → converges in ~25 frames (~0.8 s); slow enough to ignore single blinks.
- * Warm-up: 30 frames before trusting the estimate.
+ * Warm-up: 12 frames (~0.4 s). The EMA is seeded with the real signal on frame 1,
+ * so it's already representative well before the old 30-frame window. Reducing this
+ * means uncalibrated users get a personalized threshold in under half a second
+ * instead of waiting a full second on the blind fallback.
  */
 const DYNAMIC_EAR_ALPHA        = 0.04
-const DYNAMIC_EAR_WARMUP_FRAMES = 30
+const DYNAMIC_EAR_WARMUP_FRAMES = 12
 
 /** Static fallback thresholds when no personal calibration and EMA hasn't warmed up. */
 const FALLBACK_BLINK_THRESHOLD = 0.14
@@ -520,15 +523,25 @@ export class GestureEngine {
   _updateHeadPoseDwellStreaks(yaw, pitch, T) {
     const yTh = T.yaw   ?? 22
     const pTh = T.pitch ?? 18
+    // Pre-warm HEAD_DOWN 2° before the fire threshold: at typical webcam angles
+    // the face foreshortens when looking down, so the raw pitch signal spends
+    // several frames "approaching" the threshold before consistently crossing it.
+    // Starting the dwell counter early means a genuine nod already has streak
+    // credit when it finally crosses the fire line in _detect.
+    // No floor: always exactly 2° before pTh so the pre-warm zone tracks
+    // whatever sensitivity the user has configured.
+    const pThDown = pTh - 2
+
     if (yaw > yTh)   this._dwellYawRight++  ; else this._dwellYawRight  = 0
     if (yaw < -yTh)  this._dwellYawLeft++   ; else this._dwellYawLeft   = 0
     if (pitch > pTh) this._dwellPitchUp++   ; else this._dwellPitchUp   = 0
-    // Soft reset: decay by 2 per off-frame instead of hard zero.
-    // A single noisy frame won't kill the streak for a genuine down-nod.
-    if (pitch < -pTh) {
+    // Decay by 1 (was 2): a single noisy frame no longer wipes the streak.
+    // Combined with pre-warm above, this makes HEAD_DOWN as reliable as HEAD_UP
+    // without increasing false-positive risk (fire still requires full pTh + dwell ≥ 2).
+    if (pitch < -pThDown) {
       this._dwellPitchDown++
     } else {
-      this._dwellPitchDown = Math.max(0, this._dwellPitchDown - 2)
+      this._dwellPitchDown = Math.max(0, this._dwellPitchDown - 1)
     }
   }
 
@@ -548,6 +561,10 @@ export class GestureEngine {
     if (gesture === GESTURES.EYES_CLOSED && this._emitBlinkEvents) {
       this._onPanelNotify?.({ type: MSG.BLINK_DETECTED })
     }
+    // During the wizard test phase, never execute YouTube commands — the user is only
+    // testing blink detection accuracy. Without this guard, blinks mapped to PLAY_PAUSE
+    // (or any other action) would fire on the YouTube tab while calibrating.
+    if (this._emitBlinkEvents) return
     const cd = this._cooldowns[gesture]
     if (!cd || !cd.fire()) return
     const cmd = this._gestureMap[gesture] ?? COMMANDS.NONE

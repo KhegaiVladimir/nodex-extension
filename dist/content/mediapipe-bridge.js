@@ -32,6 +32,18 @@
   const RECOVERY_MAX_DELAY_MS  = 6000
   let recoveryAttempt = 0
 
+  /**
+   * Frame throttle during ad playback.
+   * Normal:  ~30 fps (no manual cap — MediaPipe Camera utility default).
+   * Ad mode: ~10 fps (one frame every 100 ms).
+   *
+   * During ads, all seek/skip commands are blocked by YouTubeController anyway,
+   * so running MediaPipe at full speed wastes CPU that YouTube's ad player needs.
+   * Throttling to 10 fps cuts MediaPipe CPU load by ~66% during ads.
+   */
+  const AD_FRAME_INTERVAL_MS = 100   // 10 fps
+  let lastFrameTs = 0
+
   let faceMesh   = null
   let camera     = null
   let videoEl    = null
@@ -90,13 +102,18 @@
 
   window.addEventListener('__nodex_load_script', (e) => {
     const { url, id } = e.detail || {}
-    if (!url || !id) return
+    if (!url || typeof url !== 'string') return
+    if (!id  || typeof id  !== 'string') return
 
     let relativePath = url
     if (url.startsWith('chrome-extension://')) {
       const pathStart = url.indexOf('/', 'chrome-extension://'.length)
       if (pathStart !== -1) relativePath = url.substring(pathStart + 1)
     }
+
+    // Only relay MediaPipe asset loads — reject anything outside the expected
+    // path prefix so hostile page scripts can't trigger arbitrary extension injection.
+    if (!relativePath.startsWith('assets/mediapipe/')) return
 
     window.postMessage({ type: 'NODEX_INJECT_SCRIPT', path: relativePath, requestId: id }, '*')
   })
@@ -122,6 +139,18 @@
       return
     }
 
+    // Read the refineLandmarks preference from storage before creating FaceMesh.
+    // When true, MediaPipe returns more accurate eye landmark positions (478 pts),
+    // which improves EAR quality without invalidating existing 'ear' calibrations.
+    // The isolated world REFINE_LANDMARKS constant stays false so signalType
+    // logic and blink calibration continue using the EAR pathway unchanged.
+    // Change takes effect on the next engine start after a YouTube tab reload.
+    let refineLandmarks = false
+    try {
+      const stored = await chrome.storage.local.get('nodex_refine_landmarks')
+      refineLandmarks = stored.nodex_refine_landmarks === true
+    } catch (_e) { /* storage unavailable — keep default false */ }
+
     await requestMediaPipeInjection()
     await waitForGlobal('FaceMesh')
     await waitForGlobal('Camera')
@@ -129,7 +158,7 @@
     faceMesh = new FaceMesh({
       locateFile: (file) => baseUrl + 'assets/mediapipe/' + file,
     })
-    faceMesh.setOptions(FACE_MESH_OPTIONS)
+    faceMesh.setOptions({ ...FACE_MESH_OPTIONS, refineLandmarks })
     faceMesh.onResults((results) => {
       try {
         if (!running) return
@@ -200,6 +229,22 @@
     camera = new Camera(videoEl, {
       onFrame: async () => {
         if (!faceMesh || !running || document.hidden) return
+
+        // During ad playback, throttle to ~10 fps to free CPU for the ad player.
+        // YouTubeController already blocks all non-volume commands during ads, so
+        // running at 30 fps here would only waste cycles without any user benefit.
+        const adPlaying =
+          document.querySelector('#movie_player.ad-showing') !== null ||
+          document.querySelector('.ytp-ad-player-overlay') !== null
+        if (adPlaying) {
+          const now = Date.now()
+          if (now - lastFrameTs < AD_FRAME_INTERVAL_MS) return
+          lastFrameTs = now
+        } else {
+          // Reset so there's no stale gap when the ad ends and we return to 30 fps.
+          lastFrameTs = 0
+        }
+
         await faceMesh.send({ image: videoEl })
       },
       width: 640,

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build:
+    name: Build & lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      # Fail fast if dist/ was not produced (catches silent Vite errors)
+      - name: Verify dist output
+        run: |
+          test -d dist || (echo "dist/ missing after build" && exit 1)
+          test -f dist/manifest.json || (echo "dist/manifest.json missing" && exit 1)

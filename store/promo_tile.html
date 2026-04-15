@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 440px;
+      height: 280px;
+      overflow: hidden;
+      background: #0A0A0A;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tile {
+      position: relative;
+      width: 440px;
+      height: 280px;
+      background: linear-gradient(to right, #0F0F0F, #1A1A2E);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Left side — text */
+    .left {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 32px;
+    }
+
+    .title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #FFFFFF;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      font-weight: 400;
+      color: #AAAAAA;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    .note {
+      font-size: 13px;
+      color: #666666;
+      line-height: 1.6;
+    }
+
+    /* Divider */
+    .divider {
+      position: absolute;
+      left: 220px;
+      top: 10%;
+      bottom: 10%;
+      width: 1px;
+      background: #6366F1;
+    }
+
+    /* Right side — icon */
+    .right {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 220px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="tile">
+    <div class="left">
+      <div class="title">NODEX</div>
+      <div class="subtitle">Control YouTube<br>with your head</div>
+      <div class="note">🔒 100% local AI<br>No camera data sent</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="right">
+      <img class="icon" src="../assets/icons/icon128.png" alt="Nodex">
+    </div>
+  </div>
+</body>
+</html>

@@ -162,6 +162,14 @@ class NodexPageScoped {
     if (cmd === COMMANDS.BACK || cmd === COMMANDS.PREV) {
       this._safeGoBack()
       applied = true
+    } else if (cmd === COMMANDS.TOGGLE_MODE) {
+      // Switch Player ↔ Browse mode via gesture.
+      // _manualModeOverride prevents _autoSetMode from overriding this on next nav.
+      this._manualModeOverride = true
+      this._setMode(!this._browseMode)
+      // Show HUD banner with the newly-active mode name (after _setMode flipped _browseMode).
+      this._hud?.showCommand(this._browseMode ? 'BROWSE_ON' : 'BROWSE_OFF')
+      applied = true
     } else {
       const controller = this._browseMode ? this._browseController : this._ytController
       const result = controller.execute(cmd)
@@ -209,6 +217,24 @@ class NodexPageScoped {
     if (browse) {
       const count = this._browseController.activate()
       if (count === 0) this._hud?.showCommand('NO_VIDEOS')
+
+      // First-time Browse Mode onboarding hint — shown exactly once, persisted in storage.
+      // Use an async IIFE so _setMode stays synchronous; the hint fires on the next microtask.
+      // Guard: skip the hint (but still set the flag) when NO_VIDEOS is already showing —
+      // the warning is more important than onboarding text.
+      const hasVideos = count > 0
+      ;(async () => {
+        try {
+          const stored = await chrome.storage.local.get('nodex_browse_hint_shown')
+          if (!stored.nodex_browse_hint_shown) {
+            if (hasVideos) this._hud?.showBrowseHint()
+            chrome.storage.local.set({ nodex_browse_hint_shown: true })
+          }
+        } catch (e) {
+          // Storage error is non-fatal — hint simply doesn't appear.
+          console.error('[Nodex] browse hint storage check failed', e)
+        }
+      })()
     } else {
       this._browseController.deactivate()
     }

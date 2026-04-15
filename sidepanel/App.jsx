@@ -18,6 +18,7 @@ import {
   loadCalibration,
 } from '../shared/storage.js'
 import CalibrationWizard from './CalibrationWizard.jsx'
+import MetricBar from './MetricBar.jsx'
 
 /* ── helpers ── */
 
@@ -93,34 +94,36 @@ const GESTURE_LABELS = {
 }
 
 const COMMAND_LABELS = {
-  [COMMANDS.PLAY]:       '▶ Play',
-  [COMMANDS.PAUSE]:      '⏸ Pause',
-  [COMMANDS.PLAY_PAUSE]: '⏯ Play/Pause',
-  [COMMANDS.VOL_UP]:     '🔊 Volume Up',
-  [COMMANDS.VOL_DOWN]:   '🔉 Volume Down',
-  [COMMANDS.MUTE]:       '🔇 Mute',
-  [COMMANDS.REWIND]:     '⏪ Rewind',
-  [COMMANDS.SKIP]:       '⏩ Skip',
-  [COMMANDS.NEXT]:       '⏭ Next',
-  [COMMANDS.PREV]:       '⏮ Previous',
-  [COMMANDS.BACK]:       '↩ Back',
-  [COMMANDS.NONE]:       '— None',
+  [COMMANDS.PLAY]:        '▶ Play',
+  [COMMANDS.PAUSE]:       '⏸ Pause',
+  [COMMANDS.PLAY_PAUSE]:  '⏯ Play/Pause',
+  [COMMANDS.VOL_UP]:      '🔊 Volume Up',
+  [COMMANDS.VOL_DOWN]:    '🔉 Volume Down',
+  [COMMANDS.MUTE]:        '🔇 Mute',
+  [COMMANDS.REWIND]:      '⏪ Rewind',
+  [COMMANDS.SKIP]:        '⏩ Skip',
+  [COMMANDS.NEXT]:        '⏭ Next',
+  [COMMANDS.PREV]:        '⏮ Previous',
+  [COMMANDS.BACK]:        '↩ Back',
+  [COMMANDS.TOGGLE_MODE]: '⇄ Switch Mode',
+  [COMMANDS.NONE]:        '— None',
 }
 
 const BROWSE_COMMAND_LABELS = {
-  [COMMANDS.REWIND]:     '← Left',
-  [COMMANDS.SKIP]:       '→ Right',
-  [COMMANDS.VOL_UP]:     '↑ Up',
-  [COMMANDS.VOL_DOWN]:   '↓ Down',
-  [COMMANDS.PLAY_PAUSE]: '✓ Select',
-  [COMMANDS.BACK]:       '↩ Back',
-  [COMMANDS.NONE]:       '— None',
+  [COMMANDS.REWIND]:      '← Left',
+  [COMMANDS.SKIP]:        '→ Right',
+  [COMMANDS.VOL_UP]:      '↑ Up',
+  [COMMANDS.VOL_DOWN]:    '↓ Down',
+  [COMMANDS.PLAY_PAUSE]:  '✓ Select',
+  [COMMANDS.BACK]:        '↩ Back',
+  [COMMANDS.TOGGLE_MODE]: '⇄ Switch Mode',
+  [COMMANDS.NONE]:        '— None',
 }
 
 const BROWSE_COMMANDS = [
   COMMANDS.REWIND, COMMANDS.SKIP,
   COMMANDS.VOL_UP, COMMANDS.VOL_DOWN,
-  COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.NONE,
+  COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.TOGGLE_MODE, COMMANDS.NONE,
 ]
 
 const TUTORIAL_GESTURES = [
@@ -210,13 +213,6 @@ const S = {
     color: '#0a0a0a',
     fontWeight: 600,
   },
-  metricRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '5px 0',
-    borderBottom: '1px solid var(--border)',
-  },
   metricLabel: { color: 'var(--muted)', fontSize: '11px' },
   metricValue: {
     color: 'var(--accent)',
@@ -244,15 +240,17 @@ const S = {
     width: '100%',
     outline: 'none',
   },
-  status: (running) => ({
+  // isActive = fully running (first landmark received)
+  // isLoading = camera started but model not ready yet / starting up
+  status: (isActive, isLoading = false) => ({
     display: 'inline-block',
     width: '8px',
     height: '8px',
     borderRadius: '50%',
     flexShrink: 0,
-    background: running ? '#4ade80' : '#3a3a3a',
+    background: isActive ? '#4ade80' : isLoading ? '#fbbf24' : '#3a3a3a',
     marginRight: '8px',
-    animation: running ? 'pulse-dot 2s ease-in-out infinite' : 'none',
+    animation: (isActive || isLoading) ? 'pulse-dot 2s ease-in-out infinite' : 'none',
   }),
   progressBar: {
     width: '100%',
@@ -400,6 +398,19 @@ export default function App() {
   const [autoPause, setAutoPause] = useState(false)
   const [blinkCalibNeeded, setBlinkCalibNeeded] = useState(false)
 
+  // Total number of times the user has started the engine (persisted across sessions).
+  // Used to detect first-launch and show the calibration nudge.
+  const [launchCount, setLaunchCount] = useState(/** @type {number|null} */ (null))
+  const launchCountRef          = useRef(0)
+  const launchPrevRunningRef    = useRef(false)
+  const launchHasIncrementedRef = useRef(false)
+
+  // Lifted to App so they survive MainScreen unmount/remount (screen tab changes).
+  // firstLaunchHintDismissed: user explicitly chose "Start without calibrating".
+  // autoNavFiredRef: prevents the auto-navigate from re-triggering after it fires once.
+  const [firstLaunchHintDismissed, setFirstLaunchHintDismissed] = useState(false)
+  const autoNavFiredRef = useRef(false)
+
   useEffect(() => {
     activeTabIdRef.current = activeTabId
     activeYouTubeTabIdRef.current = activeTabId
@@ -469,10 +480,42 @@ export default function App() {
     })
   }, [])
 
+  // Load engine-start count from storage (0 for brand-new installs).
+  useEffect(() => {
+    chrome.storage.local.get('nodex_start_count')
+      .then(({ nodex_start_count }) => {
+        const c = nodex_start_count ?? 0
+        launchCountRef.current = c
+        setLaunchCount(c)
+      })
+      .catch(() => setLaunchCount(0))
+  }, [])
+
+  // Increment the counter once per side-panel session when the engine starts.
+  // A ref guard prevents inflate from start→stop→start within one session.
+  useEffect(() => {
+    if (running && !launchPrevRunningRef.current) {
+      if (!launchHasIncrementedRef.current) {
+        launchHasIncrementedRef.current = true
+        const next = launchCountRef.current + 1
+        launchCountRef.current = next
+        setLaunchCount(next)
+        chrome.storage.local.set({ nodex_start_count: next }).catch(() => {})
+      }
+    }
+    launchPrevRunningRef.current = running
+  }, [running])
+
   const handleAutoPauseToggle = useCallback((e) => {
     const enabled = e.target.checked
     setAutoPause(enabled)
     sendToContent({ type: MSG.SET_AUTO_PAUSE, enabled })
+  }, [])
+
+  // Stable callback so MainScreen's auto-navigate effect doesn't re-fire on every render.
+  const handleGoCalibrate = useCallback(() => {
+    setBlinkCalibNeeded(false)
+    setScreen('calibration')
   }, [])
 
   useEffect(() => {
@@ -508,6 +551,26 @@ export default function App() {
     return () => chrome.runtime.onMessage.removeListener(listener)
   }, [])
 
+  // Auto-clear blink alert when a fresh calibration is saved to storage.
+  // Covers the case where the user navigates to Calibrate manually (without
+  // clicking the alert button), completes calibration, then returns to Home —
+  // without this, the stale blinkCalibNeeded=true would show a confusing
+  // "Re-calibrate" banner immediately after a successful calibration.
+  useEffect(() => {
+    const onCh = (changes, area) => {
+      if (area !== 'local') return
+      if (changes.earCalibration?.newValue != null) {
+        setBlinkCalibNeeded(false)
+      }
+    }
+    chrome.storage.onChanged.addListener(onCh)
+    return () => chrome.storage.onChanged.removeListener(onCh)
+  }, [])
+
+  // First launch: user has started the engine ≤1 time ever.
+  // launchCount=0 before the first start; =1 right after; >1 for returning users.
+  const isFirstLaunch = launchCount != null && launchCount <= 1
+
   if (onboarded === null) {
     return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
   }
@@ -539,7 +602,13 @@ export default function App() {
               ...S.navBtn,
               ...(screen === s ? S.navBtnActive : {}),
             }}
-            onClick={() => setScreen(s)}
+            onClick={() => {
+              // Navigating to Calibration clears the blink alert so that on return
+              // to Home the auto-navigate effect doesn't re-trigger (its ref resets
+              // when MainScreen unmounts).
+              if (s === 'calibration') setBlinkCalibNeeded(false)
+              setScreen(s)
+            }}
           >
             {{ main: 'Home', calibration: 'Calibrate', settings: 'Settings' }[s]}
           </button>
@@ -562,7 +631,11 @@ export default function App() {
           lastCommand={lastCommand}
           blinkCalibNeeded={blinkCalibNeeded}
           onDismissBlinkAlert={() => setBlinkCalibNeeded(false)}
-          onGoCalibrate={() => { setBlinkCalibNeeded(false); setScreen('calibration') }}
+          onGoCalibrate={handleGoCalibrate}
+          isFirstLaunch={isFirstLaunch}
+          firstLaunchHintDismissed={firstLaunchHintDismissed}
+          onDismissFirstLaunchHint={() => setFirstLaunchHintDismissed(true)}
+          autoNavFiredRef={autoNavFiredRef}
         />
       )}
       {screen === 'calibration' && (
@@ -954,10 +1027,82 @@ function MainScreen({
   running, browseMode, modeChanging, onModeToggle,
   metrics, lastCommand,
   blinkCalibNeeded, onDismissBlinkAlert, onGoCalibrate,
+  isFirstLaunch,
+  firstLaunchHintDismissed, onDismissFirstLaunchHint,
+  autoNavFiredRef,
 }) {
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState(/** @type {string|null} */ (null))
   const startTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
+
+  // modelReady: true once the first METRICS_UPDATE has arrived (landmark received),
+  // meaning MediaPipe WASM is loaded and the camera is delivering frames.
+  // Falls back to true after 5 s so a user not in frame doesn't see "Loading…" forever.
+  const [modelReady, setModelReady] = useState(false)
+  const modelReadyTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
+
+  useEffect(() => {
+    if (running) {
+      setModelReady(false)
+      modelReadyTimerRef.current = setTimeout(() => setModelReady(true), 5000)
+    } else {
+      clearTimeout(modelReadyTimerRef.current)
+      modelReadyTimerRef.current = null
+      setModelReady(false)
+    }
+    return () => {
+      clearTimeout(modelReadyTimerRef.current)
+      modelReadyTimerRef.current = null
+    }
+  }, [running])
+
+  // First landmark received → model is definitely loaded.
+  // modelReady deliberately excluded from deps: we only need to react to metrics
+  // or running changing. Including modelReady would cause a redundant re-run
+  // after setModelReady(true) fires, with no effect (condition is then false).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (metrics != null && running && !modelReady) {
+      clearTimeout(modelReadyTimerRef.current)
+      modelReadyTimerRef.current = null
+      setModelReady(true)
+    }
+  }, [metrics, running])
+
+  // Load sensitivity thresholds and personal EAR calibration so MetricBar
+  // shows the correct trigger lines. Falls back to DEFAULT_THRESHOLDS / default
+  // earClose if nothing is saved yet.
+  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS)
+  const [calibratedEar, setCalibratedEar] = useState(/** @type {number|null} */ (null))
+  // true  → calibration record exists (may be expired/mismatched — "re-calibrate" case)
+  // false → never calibrated — blink gesture effectively disabled until auto-EMA warms up
+  const [hasAnyEarCalibration, setHasAnyEarCalibration] = useState(true)
+  useEffect(() => {
+    Promise.all([
+      loadSettings({ thresholds: DEFAULT_THRESHOLDS }),
+      chrome.storage.local.get('earCalibration'),
+    ]).then(([s, { earCalibration }]) => {
+      setThresholds({ ...DEFAULT_THRESHOLDS, ...(s.thresholds ?? {}) })
+      const th = earCalibration?.threshold
+      setCalibratedEar(typeof th === 'number' && Number.isFinite(th) ? th : null)
+      setHasAnyEarCalibration(earCalibration != null)
+    })
+    const onChanged = (changes, area) => {
+      if (area !== 'local') return
+      if (changes.nodex_settings) {
+        const next = changes.nodex_settings.newValue
+        if (next?.thresholds) setThresholds({ ...DEFAULT_THRESHOLDS, ...next.thresholds })
+      }
+      if (changes.earCalibration) {
+        const cal = changes.earCalibration.newValue
+        const th = cal?.threshold
+        setCalibratedEar(typeof th === 'number' && Number.isFinite(th) ? th : null)
+        setHasAnyEarCalibration(cal != null)
+      }
+    }
+    chrome.storage.onChanged.addListener(onChanged)
+    return () => chrome.storage.onChanged.removeListener(onChanged)
+  }, [])
 
   const clearStartTimer = useCallback(() => {
     if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
@@ -992,80 +1137,133 @@ function MainScreen({
     }
   }
 
+  // Auto-navigate to the Calibration screen ~800 ms after the engine starts
+  // on the very first launch when no blink calibration exists.
+  // Cancelled if the user dismisses the blink alert or the pre-start hint.
+  // autoNavFiredRef and firstLaunchHintDismissed are lifted to App so they
+  // survive MainScreen unmount/remount caused by tab navigation.
+  const onGoCalibrateRef = useRef(onGoCalibrate)
+  onGoCalibrateRef.current = onGoCalibrate
+  useEffect(() => {
+    if (
+      running &&
+      isFirstLaunch &&
+      blinkCalibNeeded &&
+      !hasAnyEarCalibration &&
+      !firstLaunchHintDismissed &&
+      !autoNavFiredRef.current
+    ) {
+      autoNavFiredRef.current = true
+      const t = setTimeout(() => onGoCalibrateRef.current(), 800)
+      return () => clearTimeout(t)
+    }
+  }, [running, isFirstLaunch, blinkCalibNeeded, hasAnyEarCalibration, firstLaunchHintDismissed])
+
   const cmdLabels = browseMode ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
 
   return (
     <>
       {/* ── Blink calibration alert ── */}
       {blinkCalibNeeded && (
-        <div style={{
-          background: 'var(--accent-dim)',
-          border: '1px solid var(--accent)',
-          borderRadius: '10px',
-          padding: '12px 14px',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '10px',
-        }}>
-          {/* icon */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"
-            style={{ flexShrink: 0, marginTop: '1px' }}>
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-          </svg>
-
-          <div style={{ flex: 1 }}>
+        hasAnyEarCalibration
+          /* ── Calibration exists but expired / mismatched ── */
+          ? (
             <div style={{
-              fontSize: '12px', fontWeight: 700,
-              color: 'var(--accent)', marginBottom: '4px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px',
             }}>
-              Blink calibration needed
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                stroke="var(--muted)" strokeWidth="2" strokeLinecap="round"
+                style={{ flexShrink: 0, marginTop: '2px' }}>
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
+              </svg>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>
+                  Re-calibrate blink detection
+                </div>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5 }}>
+                  Your calibration has expired or no longer matches the current mode.
+                </div>
+                <button onClick={onGoCalibrate} style={{
+                  marginTop: '8px', fontFamily: 'var(--font-mono)',
+                  fontSize: '11px', fontWeight: 600,
+                  background: 'var(--surface-2)', color: 'var(--text)',
+                  border: '1px solid var(--border)', borderRadius: '6px',
+                  padding: '5px 12px', cursor: 'pointer',
+                }}>
+                  Re-calibrate →
+                </button>
+              </div>
+              <button onClick={onDismissBlinkAlert} aria-label="Dismiss" style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--muted)', fontSize: '16px', lineHeight: 1,
+                padding: '0', flexShrink: 0,
+              }}>×</button>
             </div>
+          )
+          /* ── Never calibrated — eye blink gesture is effectively off ── */
+          : (
             <div style={{
-              fontSize: '11px', fontFamily: 'var(--font-mono)',
-              color: 'var(--text)', lineHeight: 1.5,
+              background: 'var(--accent-dim)',
+              border: '1px solid var(--accent)',
+              borderRadius: '12px',
+              padding: '16px',
             }}>
-              Eye-close gesture is using fallback thresholds.
-              Calibrate for reliable detection.
-            </div>
-            <button
-              onClick={onGoCalibrate}
-              style={{
-                marginTop: '8px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px', fontWeight: 700,
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                {/* Eye icon */}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}>
+                  <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
+                  Eye blink is not set up
+                </span>
+              </div>
+              <div style={{
+                fontSize: '11px', fontFamily: 'var(--font-mono)',
+                color: 'var(--text)', lineHeight: 1.6, marginBottom: '12px',
+              }}>
+                The eye-close gesture won't work reliably without a short calibration that learns your eyes. Takes about 30 seconds.
+              </div>
+              <button onClick={onGoCalibrate} style={{
+                width: '100%', fontFamily: 'var(--font-mono)',
+                fontSize: '12px', fontWeight: 700,
                 background: 'var(--accent)', color: '#0a0a0a',
-                border: 'none', borderRadius: '6px',
-                padding: '5px 12px', cursor: 'pointer',
-              }}
-            >
-              Calibrate now →
-            </button>
-          </div>
-
-          {/* dismiss */}
-          <button
-            onClick={onDismissBlinkAlert}
-            aria-label="Dismiss"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--muted)', fontSize: '16px', lineHeight: 1,
-              padding: '0', flexShrink: 0,
-            }}
-          >
-            ×
-          </button>
-        </div>
+                border: 'none', borderRadius: '8px',
+                padding: '9px 0', cursor: 'pointer',
+                letterSpacing: '0.01em',
+              }}>
+                Set up eye blink — 30 sec
+              </button>
+              <button onClick={onDismissBlinkAlert} style={{
+                display: 'block', margin: '8px auto 0',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: '10px',
+                color: 'var(--muted)', letterSpacing: '0.03em',
+              }}>
+                skip for now
+              </button>
+            </div>
+          )
       )}
       <div style={S.card}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={S.status(running || isStarting)} />
+          <span style={S.status(running && modelReady, isStarting || (running && !modelReady))} />
           <span style={{ fontWeight: 600, fontSize: '13px' }}>
-            {running ? 'Engine running' : isStarting ? 'Starting…' : 'Engine stopped'}
+            {running
+              ? (modelReady ? 'Engine running' : 'Loading model…')
+              : isStarting ? 'Starting…' : 'Engine stopped'}
           </span>
-          {running && (
+          {running && modelReady && (
             <span style={{
               marginLeft: 'auto',
               fontSize: '10px',
@@ -1112,11 +1310,17 @@ function MainScreen({
 
         <div style={{ display: 'flex', gap: '6px' }}>
           <button
-            style={{ ...S.btn, ...(running ? S.btnSecondary : S.btnPrimary), opacity: isStarting ? 0.6 : 1 }}
+            style={{
+              ...S.btn,
+              ...(running ? S.btnSecondary : S.btnPrimary),
+              opacity: (isStarting || (running && !modelReady)) ? 0.6 : 1,
+            }}
             onClick={handleToggle}
             disabled={isStarting}
           >
-            {running ? 'Stop' : isStarting ? 'Starting…' : 'Start'}
+            {running
+              ? (modelReady ? 'Stop' : 'Loading…')
+              : isStarting ? 'Starting…' : 'Start'}
           </button>
 
           {running && (
@@ -1140,6 +1344,17 @@ function MainScreen({
           )}
         </div>
       </div>
+
+      {/* ── First-launch calibration hint — shown before engine starts ── */}
+      {/* blinkCalibNeeded suppresses this because the blink alert above already */}
+      {/* prompts calibration — showing both simultaneously is redundant.        */}
+      {!running && !isStarting && !startError &&
+        isFirstLaunch && !hasAnyEarCalibration && !firstLaunchHintDismissed && !blinkCalibNeeded && (
+        <FirstLaunchHint
+          onCalibrate={onGoCalibrate}
+          onSkip={onDismissFirstLaunchHint}
+        />
+      )}
 
       {/* Idle hint — shown when engine is off, not starting, no prior command this session */}
       {!running && !isStarting && !lastCommand && !startError && (
@@ -1197,25 +1412,109 @@ function MainScreen({
       {metrics && (
         <div style={S.card}>
           <div style={S.subheading}>Live metrics</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-            {[
-              ['Yaw', metrics.yaw],
-              ['Pitch', metrics.pitch],
-              ['Roll', metrics.roll],
-              ['EAR', metrics.ear],
-              ['Mouth', metrics.mouth],
-            ].map(([label, val]) => (
-              <div key={label} style={S.metricTile}>
-                <span style={S.metricLabel}>{label}</span>
-                <span style={S.metricValue}>
-                  {typeof val === 'number' ? val.toFixed(2) : '—'}
-                </span>
-              </div>
-            ))}
+
+          {/* Head rotation — centered bars, grow from midpoint outward */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', marginBottom: '6px' }}>
+            <MetricBar label="Yaw"   value={metrics.yaw}   max={60} threshold={thresholds.yaw}   type="centered" unit="°" />
+            <MetricBar label="Pitch" value={metrics.pitch} max={45} threshold={thresholds.pitch} type="centered" unit="°" />
+            <MetricBar label="Roll"  value={metrics.roll}  max={45} threshold={thresholds.roll}  type="centered" unit="°" />
+          </div>
+
+          {/* 1px divider between rotation and face metrics */}
+          <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0 6px' }} />
+
+          {/* Face metrics — fill bars, left to right */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
+            {/* EAR: use personal calibrated threshold when available, else settings default */}
+            <MetricBar label="EAR"   value={metrics.ear}   max={0.40} threshold={calibratedEar ?? thresholds.earClose}  type="fill" triggerBelow />
+            <MetricBar label="Mouth" value={metrics.mouth} max={1.0}  threshold={thresholds.mouthOpen} type="fill" />
           </div>
         </div>
       )}
     </>
+  )
+}
+
+/* ── First-launch calibration hint ── */
+
+/**
+ * Shown in MainScreen idle state when:
+ *   - Engine is stopped
+ *   - User has never calibrated blink detection
+ *   - This is their first (or second) engine start total
+ *
+ * Prominently asks the user to calibrate before starting, with a skip option.
+ * Clicking "Start without calibrating" dismisses the hint for this session AND
+ * prevents the auto-navigate that would otherwise fire after the engine starts.
+ */
+function FirstLaunchHint({ onCalibrate, onSkip }) {
+  return (
+    <div style={{
+      background: 'rgba(100,255,218,0.05)',
+      border: '1px solid rgba(100,255,218,0.22)',
+      borderRadius: '12px',
+      padding: '16px',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px' }}>
+        <div style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          background: 'rgba(100,255,218,0.08)',
+          border: '1px solid rgba(100,255,218,0.18)',
+          borderRadius: '8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {/* Eye icon */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
+          Set up blink detection first
+        </span>
+      </div>
+
+      {/* Body */}
+      <p style={{
+        fontSize: '11px', fontFamily: 'var(--font-mono)',
+        color: 'var(--muted)', lineHeight: 1.65, margin: '0 0 12px',
+      }}>
+        A 30-second calibration teaches Nodex your eye range — making eye-close detection
+        reliable from the first use. Without it, detection falls back to generic thresholds
+        that may not match your eyes.
+      </p>
+
+      {/* CTA */}
+      <button
+        onClick={onCalibrate}
+        style={{
+          width: '100%', fontFamily: 'var(--font-mono)',
+          fontSize: '12px', fontWeight: 700,
+          background: 'var(--accent)', color: '#0a0a0a',
+          border: 'none', borderRadius: '8px',
+          padding: '10px 0', cursor: 'pointer',
+          letterSpacing: '0.01em', marginBottom: '8px',
+        }}
+      >
+        Calibrate now — 30 sec
+      </button>
+
+      {/* Skip */}
+      <button
+        onClick={onSkip}
+        style={{
+          display: 'block', width: '100%',
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'var(--font-mono)', fontSize: '10px',
+          color: 'var(--muted)', letterSpacing: '0.03em',
+          padding: '2px 0',
+        }}
+      >
+        Start without calibrating
+      </button>
+    </div>
   )
 }
 
@@ -1372,6 +1671,9 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
   const [browseMap, setBrowseMap] = useState({ ...BROWSE_GESTURE_MAP })
   const [preset, setPreset] = useState('medium')
   const [saved, setSaved] = useState(false)
+  const [refineLandmarks, setRefineLandmarks] = useState(false)
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const clearConfirmTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
 
   useEffect(() => {
     ;(async () => {
@@ -1392,6 +1694,8 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
           break
         }
       }
+      const { nodex_refine_landmarks } = await chrome.storage.local.get('nodex_refine_landmarks')
+      setRefineLandmarks(nodex_refine_landmarks === true)
     })()
   }, [])
 
@@ -1423,6 +1727,37 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
     })
     setSaved(true)
   }
+
+  const handleRefineLandmarksToggle = async (e) => {
+    const value = e.target.checked
+    setRefineLandmarks(value)
+    await chrome.storage.local.set({ nodex_refine_landmarks: value }).catch(() => {})
+  }
+
+  const handleClearData = async () => {
+    if (!clearConfirm) {
+      setClearConfirm(true)
+      // Cancel any previous timer (rapid double-click guard).
+      if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current)
+      clearConfirmTimerRef.current = setTimeout(() => {
+        clearConfirmTimerRef.current = null
+        setClearConfirm(false)
+      }, 4000)
+      return
+    }
+    if (clearConfirmTimerRef.current) {
+      clearTimeout(clearConfirmTimerRef.current)
+      clearConfirmTimerRef.current = null
+    }
+    await chrome.storage.local.clear().catch(() => {})
+    // Reload the side panel so App resets to initial state (onboarding, etc.)
+    window.location.reload()
+  }
+
+  // Cancel the confirm timer if the user navigates away from Settings.
+  useEffect(() => () => {
+    if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current)
+  }, [])
 
   const mappableGestures = Object.values(GESTURES).filter((g) => g !== GESTURES.NONE)
   const isBrowse = editingMode === 'browse'
@@ -1533,6 +1868,64 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
             </div>
           </div>
         </label>
+
+        <div style={{ height: '1px', background: 'var(--border)', margin: '12px 0' }} />
+
+        {/* Refined landmarks toggle */}
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+          <div style={{ position: 'relative', flexShrink: 0, marginTop: '2px' }}>
+            <input
+              type="checkbox"
+              checked={refineLandmarks}
+              onChange={handleRefineLandmarksToggle}
+              style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+            />
+            <div style={{
+              width: '36px', height: '20px', borderRadius: '10px',
+              background: refineLandmarks ? 'var(--accent)' : 'var(--border)',
+              transition: 'background 0.2s', position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute', top: '3px',
+                left: refineLandmarks ? '19px' : '3px',
+                width: '14px', height: '14px', borderRadius: '50%',
+                background: refineLandmarks ? '#0a0a0a' : 'var(--muted)',
+                transition: 'left 0.2s, background 0.2s',
+              }} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
+              High-precision landmarks
+            </div>
+            <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5 }}>
+              Uses MediaPipe's attention mesh (478 pts) for more accurate eye positions.
+              Improves blink detection, especially without calibration.
+              Applies after reloading the YouTube tab.
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {/* ── Data management ── */}
+      <div style={S.card}>
+        <div style={S.subheading}>Data</div>
+        <p style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '12px' }}>
+          Nodex stores calibration data and settings locally in your browser.
+          No data is sent to any server. You can clear everything below.
+        </p>
+        <button
+          style={{
+            ...S.btn,
+            background: clearConfirm ? '#ef4444' : 'var(--surface-2)',
+            color: clearConfirm ? '#fff' : '#ef4444',
+            border: '1px solid #ef4444',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+          onClick={handleClearData}
+        >
+          {clearConfirm ? 'Tap again to confirm — this cannot be undone' : 'Clear all Nodex data'}
+        </button>
       </div>
 
       <button

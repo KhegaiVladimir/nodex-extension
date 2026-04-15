@@ -1,6 +1,6 @@
 {
   "name": "Nodex",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Control YouTube hands-free with head gestures. Face tracking runs entirely on your device — no video leaves the browser.",
   "manifest_version": 3,
 

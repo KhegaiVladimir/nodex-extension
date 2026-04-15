@@ -102,13 +102,18 @@
 
   window.addEventListener('__nodex_load_script', (e) => {
     const { url, id } = e.detail || {}
-    if (!url || !id) return
+    if (!url || typeof url !== 'string') return
+    if (!id  || typeof id  !== 'string') return
 
     let relativePath = url
     if (url.startsWith('chrome-extension://')) {
       const pathStart = url.indexOf('/', 'chrome-extension://'.length)
       if (pathStart !== -1) relativePath = url.substring(pathStart + 1)
     }
+
+    // Only relay MediaPipe asset loads — reject anything outside the expected
+    // path prefix so hostile page scripts can't trigger arbitrary extension injection.
+    if (!relativePath.startsWith('assets/mediapipe/')) return
 
     window.postMessage({ type: 'NODEX_INJECT_SCRIPT', path: relativePath, requestId: id }, '*')
   })
@@ -134,6 +139,18 @@
       return
     }
 
+    // Read the refineLandmarks preference from storage before creating FaceMesh.
+    // When true, MediaPipe returns more accurate eye landmark positions (478 pts),
+    // which improves EAR quality without invalidating existing 'ear' calibrations.
+    // The isolated world REFINE_LANDMARKS constant stays false so signalType
+    // logic and blink calibration continue using the EAR pathway unchanged.
+    // Change takes effect on the next engine start after a YouTube tab reload.
+    let refineLandmarks = false
+    try {
+      const stored = await chrome.storage.local.get('nodex_refine_landmarks')
+      refineLandmarks = stored.nodex_refine_landmarks === true
+    } catch (_e) { /* storage unavailable — keep default false */ }
+
     await requestMediaPipeInjection()
     await waitForGlobal('FaceMesh')
     await waitForGlobal('Camera')
@@ -141,7 +158,7 @@
     faceMesh = new FaceMesh({
       locateFile: (file) => baseUrl + 'assets/mediapipe/' + file,
     })
-    faceMesh.setOptions(FACE_MESH_OPTIONS)
+    faceMesh.setOptions({ ...FACE_MESH_OPTIONS, refineLandmarks })
     faceMesh.onResults((results) => {
       try {
         if (!running) return

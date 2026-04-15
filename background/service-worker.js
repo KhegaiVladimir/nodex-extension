@@ -46,6 +46,15 @@ async function injectIntoTab(tabId) {
 
 // ── Lifecycle hooks ────────────────────────────────────────────────────────
 
+// Register the uninstall URL — MV3 has no onUninstalled event, so this is the
+// only hook available. Local storage is NOT cleared automatically on uninstall;
+// this is documented in the Privacy Policy as a known Chrome limitation.
+// Promise.resolve() wraps both undefined (Chrome <105) and a real Promise (Chrome 105+)
+// so .catch() is always safe regardless of which Chrome version is running.
+void Promise.resolve(
+  chrome.runtime.setUninstallURL('https://khegaivladimir.github.io/nodex/uninstall')
+).catch(() => {})
+
 // Inject into all already-open YouTube tabs on install / update.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.tabs.query({ url: 'https://www.youtube.com/*' }, (tabs) => {
@@ -127,7 +136,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break
       }
       const filePath = message.path
-      if (!filePath || typeof filePath !== 'string') {
+      // Restrict to MediaPipe assets only — any script on YouTube.com can trigger
+      // __nodex_load_script events that propagate here, so we must whitelist the
+      // expected path prefix rather than trusting the caller.
+      if (!filePath || typeof filePath !== 'string' || !filePath.startsWith('assets/mediapipe/')) {
         sendResponse({ ok: false, error: 'invalid file path' })
         break
       }

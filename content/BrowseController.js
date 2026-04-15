@@ -31,7 +31,7 @@ const ROW_SORT_TOL_PX = 8
 const VERTICAL_SKIP_MS = 1500
 const MUTATION_DEBOUNCE_MS = 800
 const SCROLL_TRACK_MS = 400
-const PERIODIC_SCAN_MS = 5000
+const PERIODIC_SCAN_MS = 15000
 /** Minimum gap between browse movement commands (gestures must not double-step).
  *  Reduced to 700ms (was 880) for snappier navigation. GestureEngine HEAD_LEFT/RIGHT
  *  cooldown is 350ms, so effective minimum is max(350, 700) = 700ms. */

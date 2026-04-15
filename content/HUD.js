@@ -114,6 +114,12 @@ const HUD_STYLES = /* css */`
     box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,80,80,0.12) inset;
   }
 
+  .toast.browse-hint {
+    background: rgba(6, 18, 14, 0.82);
+    border-color: rgba(100, 255, 218, 0.20);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(100,255,218,0.08) inset;
+  }
+
   .toast-icon {
     width: 32px;
     height: 32px;
@@ -131,10 +137,22 @@ const HUD_STYLES = /* css */`
     background: rgba(255, 80, 80, 0.12);
   }
 
+  .toast.browse-hint .toast-icon {
+    color: #64FFDA;
+    background: rgba(100, 255, 218, 0.12);
+  }
+
   .toast-icon svg {
     width: 18px;
     height: 18px;
     display: block;
+  }
+
+  /* Text wrapper — stacks label + optional subtitle vertically */
+  .toast-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .toast-label {
@@ -142,6 +160,20 @@ const HUD_STYLES = /* css */`
     font-weight: 500;
     color: rgba(255, 255, 255, 0.92);
     letter-spacing: 0.01em;
+  }
+
+  .toast-subtitle {
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 0.01em;
+    display: none;
+  }
+
+  /* Subtitle only visible on browse-hint toasts */
+  .toast.browse-hint .toast-subtitle {
+    display: block;
+    color: rgba(100, 255, 218, 0.60);
   }
 
   /* ── Metrics ────────────────────────────────────────────── */
@@ -250,6 +282,7 @@ export class HUD {
     this._toast       = null
     this._toastIcon   = null
     this._toastLabel  = null
+    this._toastSubtitle = null
     this._modeBadge   = null
     this._modeBadgeSvg = null
     this._modeBadgeLabel = null
@@ -293,14 +326,16 @@ export class HUD {
       COMMAND_META[command]
     if (!meta) return
 
-    this._toastIcon.innerHTML  = meta.icon
+    this._toastIcon.innerHTML    = meta.icon
     this._toastLabel.textContent = meta.label
+    this._toastSubtitle.textContent = ''
 
     if (meta.warning) {
       this._toast.classList.add('warning')
     } else {
       this._toast.classList.remove('warning')
     }
+    this._toast.classList.remove('browse-hint')
 
     this._toast.classList.add('visible')
     clearTimeout(this._toastTimer)
@@ -311,8 +346,10 @@ export class HUD {
 
   showWarning(message) {
     if (!this._toast) return
-    this._toastIcon.innerHTML   = ICONS.warning
+    this._toastIcon.innerHTML    = ICONS.warning
     this._toastLabel.textContent = message
+    this._toastSubtitle.textContent = ''
+    this._toast.classList.remove('browse-hint')
     this._toast.classList.add('visible', 'warning')
     clearTimeout(this._toastTimer)
     this._toastTimer = setTimeout(() => {
@@ -350,11 +387,30 @@ export class HUD {
     }
   }
 
+  /**
+   * One-time Browse Mode onboarding hint.
+   * Call only when `nodex_browse_hint_shown` is NOT set in storage.
+   * Shows for 5 seconds with gesture cues, then fades out.
+   */
+  showBrowseHint() {
+    if (!this._toast) return
+    this._toastIcon.innerHTML     = ICONS.browse
+    this._toastLabel.textContent  = 'Browse Mode'
+    this._toastSubtitle.textContent = 'Nod left/right to navigate · Tilt to go back'
+
+    this._toast.classList.remove('warning')
+    this._toast.classList.add('visible', 'browse-hint')
+    clearTimeout(this._toastTimer)
+    this._toastTimer = setTimeout(() => {
+      this._toast.classList.remove('visible', 'browse-hint')
+    }, 5000)
+  }
+
   unmount() {
     clearTimeout(this._toastTimer)
     this._host?.parentNode?.removeChild(this._host)
     this._host = this._shadow = this._toast = this._toastIcon =
-      this._toastLabel = this._modeBadge = this._modeBadgeSvg =
+      this._toastLabel = this._toastSubtitle = this._modeBadge = this._modeBadgeSvg =
       this._modeBadgeLabel = this._panel =
       this._metricYaw = this._metricPitch = this._metricRoll =
       this._metricEar = this._earDot = null
@@ -369,11 +425,21 @@ export class HUD {
     this._toastIcon = document.createElement('div')
     this._toastIcon.className = 'toast-icon'
 
+    // Text wrapper: holds the primary label + optional subtitle
+    const textWrap = document.createElement('div')
+    textWrap.className = 'toast-text'
+
     this._toastLabel = document.createElement('span')
     this._toastLabel.className = 'toast-label'
 
+    this._toastSubtitle = document.createElement('span')
+    this._toastSubtitle.className = 'toast-subtitle'
+
+    textWrap.appendChild(this._toastLabel)
+    textWrap.appendChild(this._toastSubtitle)
+
     this._toast.appendChild(this._toastIcon)
-    this._toast.appendChild(this._toastLabel)
+    this._toast.appendChild(textWrap)
     this._shadow.appendChild(this._toast)
   }
 
