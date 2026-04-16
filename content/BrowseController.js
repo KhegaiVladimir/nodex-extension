@@ -305,19 +305,22 @@ function buildRows(items, rects, _rowBreakPx) {
   }
 
   // 2. Compute clustering threshold from median item height (real tiles only).
-  // Placeholder skeletons (~50–80px) and h=0 must not pollute median during lazy load.
-  const CLUSTER_GAP_FALLBACK_PX = 200
+  // h=0 skeletons must not pollute the median — filter those out.
+  // Threshold was > 100 but that excluded compact sidebar thumbnails (~68px),
+  // causing their clusterGap to fall back to 200px and grouping every two
+  // sidebar videos into one "row", making vertical navigation skip one item.
+  const CLUSTER_GAP_FALLBACK_PX = 80
   let clusterGap = 100
   if (flat.length > 0) {
     const heights = flat
       .map((el) => rects.get(el)?.height ?? 0)
-      .filter((h) => h > 100)
+      .filter((h) => h > 20)   // exclude zero-height skeletons only
       .sort((a, b) => a - b)
     if (heights.length >= 3) {
       const median = heights[Math.floor(heights.length / 2)]
       // Gap threshold: half the median height. Items within this distance
       // vertically count as the same row. Noise from badges is typically
-      // under 20px, so a threshold of 80-100px is safe.
+      // under 20px, so a threshold of 60px minimum is safe.
       clusterGap = Math.max(60, median * 0.5)
     } else {
       clusterGap = CLUSTER_GAP_FALLBACK_PX
@@ -454,7 +457,12 @@ export class BrowseController {
 
     this._onYtNavigateFinish = () => {
       if (this._destroyed) return
-      this._focusRing = null
+      // Remove the old ring from the DOM before nulling the ref —
+      // otherwise it stays orphaned on screen after SPA navigation.
+      if (this._focusRing) {
+        this._focusRing.remove()
+        this._focusRing = null
+      }
       this._ensureFocusRing()
       this._scanItems()
       if (this._currentItems.length > 0 && this._focusIndex < 0) this._focusFirstVisible()

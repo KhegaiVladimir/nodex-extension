@@ -565,6 +565,19 @@ export class GestureEngine {
     // testing blink detection accuracy. Without this guard, blinks mapped to PLAY_PAUSE
     // (or any other action) would fire on the YouTube tab while calibrating.
     if (this._emitBlinkEvents) return
+
+    // Once a head-pose gesture commits, the movement is complete. Clear the residual
+    // history buffer so blink detection isn't suppressed by stale elevated values from
+    // the just-finished gesture. Without this, _headPoseNotNeutralForEyes() blocks blinks
+    // for ~200ms after every head gesture — critically breaks the tutorial sequence where
+    // HEAD_UP is immediately followed by EYES_CLOSED.
+    if (gesture !== GESTURES.EYES_CLOSED && gesture !== GESTURES.MOUTH_OPEN) {
+      this._headHistFull = false
+      this._headHistIdx  = 0
+      this._headHistYaw.fill(0)
+      this._headHistPitch.fill(0)
+    }
+
     const cd = this._cooldowns[gesture]
     if (!cd || !cd.fire()) return
     const cmd = this._gestureMap[gesture] ?? COMMANDS.NONE

@@ -34,7 +34,8 @@ window.__nodexLoaded = true
 
 /** @param {unknown} data */
 function isValidLandmarkBatch(data) {
-  if (!Array.isArray(data) || data.length !== 468) return false
+  // Accept 468 (standard) or 478 (refineLandmarks: true — iris points included).
+  if (!Array.isArray(data) || (data.length !== 468 && data.length !== 478)) return false
   for (let i = 0; i < data.length; i++) {
     const p = data[i]
     if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || typeof p.z !== 'number') {
@@ -522,6 +523,11 @@ class NodexPersistent {
       if (!this._running || this._destroyed) return
       if (!isValidLandmarkBatch(e.data.data)) return
       this._lastLandmarkTime = Date.now()
+      // Reset backoff only when a real landmark arrives — not during the grace
+      // period after a restart (where _lastLandmarkTime is artificially set).
+      // Without this, _restartAttempts resets every 3 s due to the watchdog's
+      // elapsed < LANDMARK_TIMEOUT_MS branch, making MAX_RESTART_ATTEMPTS useless.
+      this._restartAttempts = 0
 
       // ── Face returned ────────────────────────────────────────────────────
       // Reset no-face timer; if we auto-paused, resume playback now.
@@ -989,10 +995,7 @@ class NodexPersistent {
     }
 
     const elapsed = Date.now() - this._lastLandmarkTime
-    if (elapsed < LANDMARK_TIMEOUT_MS) {
-      this._restartAttempts = 0
-      return
-    }
+    if (elapsed < LANDMARK_TIMEOUT_MS) return
 
     if (this._bridgeRecovering) return
 

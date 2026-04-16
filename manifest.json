@@ -50,8 +50,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/mediapipe/*",
-        "content/mediapipe-bridge.js"
+        "assets/mediapipe/*"
       ],
       "matches": ["https://www.youtube.com/*"]
     }
