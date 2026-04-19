@@ -9,6 +9,7 @@ export const PLAYER_GESTURE_MAP = {
   [GESTURES.TILT_LEFT]:   COMMANDS.PREV,
   [GESTURES.TILT_RIGHT]:  COMMANDS.NEXT,
   [GESTURES.EYES_CLOSED]: COMMANDS.PLAY_PAUSE,
+  [GESTURES.EYES_HOLD]:   COMMANDS.NONE,
   [GESTURES.MOUTH_OPEN]:  COMMANDS.MUTE,
 }
 
@@ -18,6 +19,7 @@ export const BROWSE_GESTURE_MAP = {
   [GESTURES.HEAD_UP]:     COMMANDS.VOL_UP,
   [GESTURES.HEAD_DOWN]:   COMMANDS.VOL_DOWN,
   [GESTURES.EYES_CLOSED]: COMMANDS.PLAY_PAUSE,
+  [GESTURES.EYES_HOLD]:   COMMANDS.NONE,
   [GESTURES.TILT_LEFT]:   COMMANDS.BACK,
   [GESTURES.TILT_RIGHT]:  COMMANDS.NONE,
   [GESTURES.MOUTH_OPEN]:  COMMANDS.NONE,
@@ -32,16 +34,17 @@ export const DEFAULT_COOLDOWNS = {
   [GESTURES.HEAD_RIGHT]:  350,   // seek — slightly faster (was 400)
   [GESTURES.TILT_LEFT]:   800,
   [GESTURES.TILT_RIGHT]:  800,
-  [GESTURES.EYES_CLOSED]: 1200,
+  [GESTURES.EYES_CLOSED]: 900,
+  [GESTURES.EYES_HOLD]:   1500,
   [GESTURES.MOUTH_OPEN]:  600,
 }
 
 export const DEFAULT_THRESHOLDS = {
   /** Degrees past calibrated neutral to trigger head-left/right (seek). */
   yaw: 22,
-  /** Degrees past neutral for head-up/down (volume). Kept at 13° — comfortable for webcam
-   *  + glasses where pitch rarely exceeds 15°. */
-  pitch: 13,
+  /** Degrees past neutral for head-up/down (volume). 9° — lowered further since
+   *  downward nod at a typical webcam angle produces limited pitch signal. */
+  pitch: 9,
   /** Degrees of head tilt (roll) for prev/next. */
   roll: 15,
   earClose: 0.22,
@@ -79,7 +82,7 @@ export const CALIBRATION_BLINK_MAX_MS = Number.POSITIVE_INFINITY
 export const SENSITIVITY_PRESETS = {
   low: {
     yaw:             26,
-    pitch:           17,
+    pitch:           13,
     roll:            18,
     earClose:        0.16,
     mouthOpen:       0.62,
@@ -90,7 +93,7 @@ export const SENSITIVITY_PRESETS = {
   medium: DEFAULT_THRESHOLDS,
   high: {
     yaw:             18,
-    pitch:           11,
+    pitch:           7,
     roll:            12,
     earClose:        0.24,
     mouthOpen:       0.48,

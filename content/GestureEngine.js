@@ -56,6 +56,13 @@ const EYE_ROLL_BLOCK_DEG  = 12
 const BLINK_MAX_CLOSED_FRAMES = 35
 
 /**
+ * Frame threshold for the long eye-hold gesture (~1.4 s at 30fps).
+ * Fires while eyes are still closed — before EYES_CLOSED can fire on release.
+ * Must be > BLINK_MAX_CLOSED_FRAMES so the two gestures are mutually exclusive.
+ */
+const LONG_HOLD_FRAMES = 42
+
+/**
  * Auto-calibration EMA for open-eye EAR baseline.
  * α = 0.04 → converges in ~25 frames (~0.8 s); slow enough to ignore single blinks.
  * Warm-up: 12 frames (~0.4 s). The EMA is seeded with the real signal on frame 1,
@@ -67,8 +74,8 @@ const DYNAMIC_EAR_ALPHA        = 0.04
 const DYNAMIC_EAR_WARMUP_FRAMES = 12
 
 /** Static fallback thresholds when no personal calibration and EMA hasn't warmed up. */
-const FALLBACK_BLINK_THRESHOLD = 0.14
-const FALLBACK_BLINK_EXIT      = 0.18
+const FALLBACK_BLINK_THRESHOLD = 0.15
+const FALLBACK_BLINK_EXIT      = 0.19
 const FALLBACK_NOISE_FLOOR     = 0.03
 
 /** Iris fallback (refined landmarks only, ~0.05–0.15 open, <0.03 closed). */
@@ -121,6 +128,8 @@ export class GestureEngine {
     this._emitBlinkEvents = false
 
     this._closedStreak    = 0
+    /** Set to true when EYES_HOLD fires; prevents EYES_CLOSED from firing on release. */
+    this._longHoldFired   = false
     // Dead-zone frame counter: consecutive frames where signal sits between threshold and exit.
     // When this reaches DEAD_ZONE_DECAY_FRAMES, streak is halved to flush noisy accumulation.
     this._deadZoneFrames  = 0
@@ -174,7 +183,18 @@ export class GestureEngine {
         ((REFINE_LANDMARKS && st === 'iris') ||
           (!REFINE_LANDMARKS && (st === 'ear' || st == null)))
       if (calMatchesMode) {
-        this._blinkCalibration = earCalibration
+        // Migrate old calibrations that used the wide exitThreshold formula.
+        // Old formula: earClosed + range*0.72, which put exit deep in the open zone.
+        // New formula: threshold + 0.03 — narrow gap so any eye opening fires.
+        const narrowExit = Math.min(
+          earCalibration.threshold + 0.03,
+          (earCalibration.earOpen ?? 0.5) * 0.80,
+        )
+        if (earCalibration.exitThreshold > earCalibration.threshold + 0.05) {
+          this._blinkCalibration = { ...earCalibration, exitThreshold: narrowExit }
+        } else {
+          this._blinkCalibration = earCalibration
+        }
       } else {
         this._blinkCalibration = null
         this._onPanelNotify?.({ type: MSG.BLINK_CALIB_NEEDED })
@@ -239,7 +259,8 @@ export class GestureEngine {
     const r = this._blinkCalibration
     let th = r.threshold + delta
     th = Math.max(0.012, Math.min(0.5, th))
-    const exitThreshold = Math.min(r.earClosed + r.range * 0.72, r.earOpen * 0.92)
+    // Keep exitThreshold just above the new threshold — same narrow-gap rule as calibration.
+    const exitThreshold = Math.min(th + 0.03, r.earOpen * 0.80)
     this._blinkCalibration = { ...r, threshold: th, exitThreshold }
     void chrome.storage.local.set({ earCalibration: this._blinkCalibration })
   }
@@ -295,6 +316,7 @@ export class GestureEngine {
 
     if (this._blocked) {
       this._closedStreak   = 0
+      this._longHoldFired  = false
       this._deadZoneFrames = 0
       this._resetHeadPoseDwell()
       this._active = GESTURES.NONE
@@ -318,12 +340,14 @@ export class GestureEngine {
       if (headPoseBlocksEyes || headNotNeutralRecent) {
         // Head in motion — flush streak to prevent residual phantom fires.
         this._closedStreak   = 0
+        this._longHoldFired  = false
         this._deadZoneFrames = 0
       } else {
         this._processBlinkFrame(blinkSignal, metrics, irisSignal !== null)
       }
     } else {
       this._closedStreak   = 0
+      this._longHoldFired  = false
       this._deadZoneFrames = 0
     }
 
@@ -395,8 +419,10 @@ export class GestureEngine {
       }
       this._earEmaFrames++
       if (this._earEmaFrames >= DYNAMIC_EAR_WARMUP_FRAMES && this._earEmaOpen >= 0.12) {
-        this._dynamicEarThreshold = Math.max(0.08, this._earEmaOpen * 0.65)
-        this._dynamicEarExit      = Math.max(0.11, this._earEmaOpen * 0.82)
+        // 0.60× open-eye EAR: slightly more permissive than 0.65 so users with
+        // naturally smaller EAR range still trigger reliably at 0.5 s.
+        this._dynamicEarThreshold = Math.max(0.08, this._earEmaOpen * 0.60)
+        this._dynamicEarExit      = Math.max(0.11, this._earEmaOpen * 0.80)
       }
     }
 
@@ -414,20 +440,13 @@ export class GestureEngine {
       ? bc.noiseFloor
       : useIrisScale ? FALLBACK_IRIS_NOISE : FALLBACK_NOISE_FLOOR
 
-    // Minimum closed frames to count as intentional gesture vs natural blink.
-    //
-    // Natural blink:          ~100–400 ms  =  3–12 frames @ 30fps
-    // Intentional gesture:    ~450 ms+     =  13+ frames @ 30fps
-    //
-    // Without personal calibration we don't know the user's eye anatomy, so
-    // we need a wider safety margin: 13 frames (~433 ms) clearly separates
-    // intentional holds from the upper tail of natural blinks.
-    //
-    // With personal calibration the noise floor is measured from real samples,
-    // so a tighter window (9–11 frames) is safe and feels more responsive.
-    const minClosed = hasPersonal
-      ? (noise > 0.012 ? 11 : 9)
-      : useIrisScale ? (noise > 0.012 ? 11 : 9) : 13
+    // Minimum closed frames to count as an intentional blink gesture.
+    // Fixed at 15 frames (~0.5 s @ 30fps) everywhere — this is the universal
+    // "hold your eyes closed for half a second" rule communicated to users.
+    // Natural involuntary blinks are 100–300 ms (3–9 frames), so 15 frames
+    // cleanly separates accidental blinks from intentional ones without
+    // needing per-user calibration.
+    const minClosed = 15
 
     const maxClosed = BLINK_MAX_CLOSED_FRAMES
 
@@ -435,23 +454,37 @@ export class GestureEngine {
       // ── CLOSED zone ────────────────────────────────────────────────────────
       this._closedStreak++
       this._deadZoneFrames = 0
+
+      // Fire EYES_HOLD exactly once when the hold crosses the long-hold threshold.
+      // Fires while still closed so the user gets instant feedback without waiting
+      // for eye-open; _longHoldFired blocks EYES_CLOSED from also firing on release.
+      if (this._closedStreak === LONG_HOLD_FRAMES && !this._longHoldFired) {
+        this._longHoldFired = true
+        this._fire(GESTURES.EYES_HOLD, metrics)
+      }
     } else if (blinkSignal > exitThreshold) {
       // ── OPEN zone ──────────────────────────────────────────────────────────
-      if (this._closedStreak >= minClosed && this._closedStreak <= maxClosed) {
+      if (!this._longHoldFired && this._closedStreak >= minClosed && this._closedStreak <= maxClosed) {
         this._fire(GESTURES.EYES_CLOSED, metrics)
       }
       this._closedStreak   = 0
+      this._longHoldFired  = false
       this._deadZoneFrames = 0
     } else {
       // ── DEAD ZONE (threshold..exitThreshold) ───────────────────────────────
-      // Signal is noisy near the boundary. We hold the streak but count dead-zone
-      // frames; if stuck here for DEAD_ZONE_DECAY_FRAMES consecutive frames,
-      // halve the streak to prevent phantom fire from accumulated noisy frames.
-      this._deadZoneFrames++
-      if (this._deadZoneFrames >= DEAD_ZONE_DECAY_FRAMES) {
-        this._closedStreak   = Math.floor(this._closedStreak / 2)
-        this._deadZoneFrames = 0
+      // Decay only applies to SHORT streaks (< minClosed) — those are noise or
+      // natural blinks we want to suppress. A long streak means the user
+      // deliberately held their eyes closed; the signal is simply rising back
+      // through the dead zone on the way to OPEN. Halving it here would kill the
+      // gesture right before it fires, which is exactly what was breaking blinks.
+      if (this._closedStreak < minClosed) {
+        this._deadZoneFrames++
+        if (this._deadZoneFrames >= DEAD_ZONE_DECAY_FRAMES) {
+          this._closedStreak   = Math.floor(this._closedStreak / 2)
+          this._deadZoneFrames = 0
+        }
       }
+      // For long streaks: just hold, wait for signal to cross exitThreshold.
     }
   }
 
@@ -477,6 +510,7 @@ export class GestureEngine {
     this._destroyed = true
     this._active    = GESTURES.NONE
     this._closedStreak   = 0
+    this._longHoldFired  = false
     this._deadZoneFrames = 0
     this.stopCalibrationWizard()
     this._yawBaseline   = 0
@@ -523,14 +557,11 @@ export class GestureEngine {
   _updateHeadPoseDwellStreaks(yaw, pitch, T) {
     const yTh = T.yaw   ?? 22
     const pTh = T.pitch ?? 18
-    // Pre-warm HEAD_DOWN 2° before the fire threshold: at typical webcam angles
-    // the face foreshortens when looking down, so the raw pitch signal spends
-    // several frames "approaching" the threshold before consistently crossing it.
-    // Starting the dwell counter early means a genuine nod already has streak
-    // credit when it finally crosses the fire line in _detect.
-    // No floor: always exactly 2° before pTh so the pre-warm zone tracks
-    // whatever sensitivity the user has configured.
-    const pThDown = pTh - 2
+    // Pre-warm HEAD_DOWN 4° before the fire threshold: face foreshortens when
+    // looking down at a webcam, so the signal spends several frames approaching
+    // threshold before consistently crossing it. Earlier pre-warm = more dwell
+    // credit built up, so the gesture fires as soon as the threshold is crossed.
+    const pThDown = pTh - 4
 
     if (yaw > yTh)   this._dwellYawRight++  ; else this._dwellYawRight  = 0
     if (yaw < -yTh)  this._dwellYawLeft++   ; else this._dwellYawLeft   = 0
@@ -593,10 +624,10 @@ export class GestureEngine {
 
     // HEAD_UP: 4° margin keeps it strict — looking up at a webcam is clean.
     if (absPitch + 4 >= absYaw && pitch > pTh && this._dwellPitchUp >= dwellPitch) return GESTURES.HEAD_UP
-    // HEAD_DOWN: 6° margin — wider because looking down causes more yaw sway
-    // (head naturally rotates slightly when dropping chin). Also uses a shorter
-    // dedicated dwell so the gesture registers as reliably as HEAD_UP.
-    if (absPitch + 6 >= absYaw && pitch < -pTh && this._dwellPitchDown >= HEAD_POSE_DWELL_FRAMES_PITCH_DOWN) return GESTURES.HEAD_DOWN
+    // HEAD_DOWN: +14° margin — nodding down causes natural yaw drift so we allow
+    // significant co-occurring yaw before refusing to fire. This prevents the
+    // dominance check from blocking genuine nods when the user's head sways slightly.
+    if (absPitch + 14 >= absYaw && pitch < -pTh && this._dwellPitchDown >= HEAD_POSE_DWELL_FRAMES_PITCH_DOWN) return GESTURES.HEAD_DOWN
     if (yaw < -yTh && this._dwellYawLeft  >= dwellYaw) return GESTURES.HEAD_LEFT
     if (yaw >  yTh && this._dwellYawRight >= dwellYaw) return GESTURES.HEAD_RIGHT
     if (roll < -T.roll)    return GESTURES.TILT_LEFT

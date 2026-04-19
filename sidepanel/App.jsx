@@ -83,41 +83,42 @@ async function requestEngineStatus() {
 }
 
 const GESTURE_LABELS = {
-  [GESTURES.HEAD_LEFT]:   '← Head Left',
-  [GESTURES.HEAD_RIGHT]:  '→ Head Right',
-  [GESTURES.HEAD_UP]:     '↑ Head Up',
-  [GESTURES.HEAD_DOWN]:   '↓ Head Down',
-  [GESTURES.TILT_LEFT]:   '↰ Tilt Left',
-  [GESTURES.TILT_RIGHT]:  '↱ Tilt Right',
-  [GESTURES.EYES_CLOSED]: '👁 Eyes Closed',
-  [GESTURES.MOUTH_OPEN]:  '👄 Mouth Open',
+  [GESTURES.HEAD_LEFT]:   'Head Left',
+  [GESTURES.HEAD_RIGHT]:  'Head Right',
+  [GESTURES.HEAD_UP]:     'Head Up',
+  [GESTURES.HEAD_DOWN]:   'Head Down',
+  [GESTURES.TILT_LEFT]:   'Tilt Left',
+  [GESTURES.TILT_RIGHT]:  'Tilt Right',
+  [GESTURES.EYES_CLOSED]: 'Eyes Closed',
+  [GESTURES.EYES_HOLD]:   'Eyes Hold',
+  [GESTURES.MOUTH_OPEN]:  'Mouth Open',
 }
 
 const COMMAND_LABELS = {
-  [COMMANDS.PLAY]:        '▶ Play',
-  [COMMANDS.PAUSE]:       '⏸ Pause',
-  [COMMANDS.PLAY_PAUSE]:  '⏯ Play/Pause',
-  [COMMANDS.VOL_UP]:      '🔊 Volume Up',
-  [COMMANDS.VOL_DOWN]:    '🔉 Volume Down',
-  [COMMANDS.MUTE]:        '🔇 Mute',
-  [COMMANDS.REWIND]:      '⏪ Rewind',
-  [COMMANDS.SKIP]:        '⏩ Skip',
-  [COMMANDS.NEXT]:        '⏭ Next',
-  [COMMANDS.PREV]:        '⏮ Previous',
-  [COMMANDS.BACK]:        '↩ Back',
-  [COMMANDS.TOGGLE_MODE]: '⇄ Switch Mode',
-  [COMMANDS.NONE]:        '— None',
+  [COMMANDS.PLAY]:        'Play',
+  [COMMANDS.PAUSE]:       'Pause',
+  [COMMANDS.PLAY_PAUSE]:  'Play / Pause',
+  [COMMANDS.VOL_UP]:      'Volume Up',
+  [COMMANDS.VOL_DOWN]:    'Volume Down',
+  [COMMANDS.MUTE]:        'Mute',
+  [COMMANDS.REWIND]:      'Rewind −10s',
+  [COMMANDS.SKIP]:        'Skip +10s',
+  [COMMANDS.NEXT]:        'Next Video',
+  [COMMANDS.PREV]:        'Prev Video',
+  [COMMANDS.BACK]:        'Go Back',
+  [COMMANDS.TOGGLE_MODE]: 'Switch Mode',
+  [COMMANDS.NONE]:        '—',
 }
 
 const BROWSE_COMMAND_LABELS = {
-  [COMMANDS.REWIND]:      '← Left',
-  [COMMANDS.SKIP]:        '→ Right',
-  [COMMANDS.VOL_UP]:      '↑ Up',
-  [COMMANDS.VOL_DOWN]:    '↓ Down',
-  [COMMANDS.PLAY_PAUSE]:  '✓ Select',
-  [COMMANDS.BACK]:        '↩ Back',
-  [COMMANDS.TOGGLE_MODE]: '⇄ Switch Mode',
-  [COMMANDS.NONE]:        '— None',
+  [COMMANDS.REWIND]:      'Left',
+  [COMMANDS.SKIP]:        'Right',
+  [COMMANDS.VOL_UP]:      'Up',
+  [COMMANDS.VOL_DOWN]:    'Down',
+  [COMMANDS.PLAY_PAUSE]:  'Select',
+  [COMMANDS.BACK]:        'Go Back',
+  [COMMANDS.TOGGLE_MODE]: 'Switch Mode',
+  [COMMANDS.NONE]:        '—',
 }
 
 const BROWSE_COMMANDS = [
@@ -146,29 +147,28 @@ const S = {
   },
   heading: {
     fontFamily: 'var(--font-heading)',
-    fontSize: '22px',
-    fontWeight: 800,
-    color: 'var(--accent)',
+    fontSize: '20px',
+    fontWeight: 700,
+    color: 'var(--text)',
     margin: 0,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
   },
   subheading: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '10px',
-    fontWeight: 600,
+    fontFamily: 'var(--font-ui)',
+    fontSize: '11px',
+    fontWeight: 500,
     color: 'var(--muted)',
     marginBottom: '10px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.01em',
   },
   card: {
     background: 'var(--surface)',
     border: '1px solid var(--border)',
     borderRadius: '12px',
-    padding: '14px',
+    padding: '16px',
   },
   btn: {
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-ui)',
     fontSize: '13px',
     fontWeight: 600,
     padding: '10px 0',
@@ -180,12 +180,12 @@ const S = {
     letterSpacing: '0.01em',
   },
   btnPrimary: {
-    background: 'var(--accent)',
-    color: '#0a0a0a',
+    background: 'var(--text)',
+    color: '#0e0e0e',
   },
   btnSecondary: {
-    background: 'var(--surface-2)',
-    color: 'var(--text)',
+    background: 'transparent',
+    color: 'var(--muted)',
     border: '1px solid var(--border)',
   },
   nav: {
@@ -198,8 +198,8 @@ const S = {
   },
   navBtn: {
     flex: 1,
-    fontFamily: 'var(--font-mono)',
-    fontSize: '11px',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '12px',
     padding: '7px 0',
     border: 'none',
     borderRadius: '7px',
@@ -209,8 +209,8 @@ const S = {
     transition: 'all 0.15s',
   },
   navBtnActive: {
-    background: 'var(--accent)',
-    color: '#0a0a0a',
+    background: 'var(--surface-2)',
+    color: 'var(--text)',
     fontWeight: 600,
   },
   metricLabel: { color: 'var(--muted)', fontSize: '11px' },
@@ -230,7 +230,7 @@ const S = {
     alignItems: 'center',
   },
   select: {
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-ui)',
     fontSize: '12px',
     background: 'var(--bg)',
     color: 'var(--text)',
@@ -244,13 +244,13 @@ const S = {
   // isLoading = camera started but model not ready yet / starting up
   status: (isActive, isLoading = false) => ({
     display: 'inline-block',
-    width: '8px',
-    height: '8px',
+    width: '6px',
+    height: '6px',
     borderRadius: '50%',
     flexShrink: 0,
-    background: isActive ? '#4ade80' : isLoading ? '#fbbf24' : '#3a3a3a',
+    background: isActive ? '#4ade80' : isLoading ? '#f59e0b' : '#404040',
     marginRight: '8px',
-    animation: (isActive || isLoading) ? 'pulse-dot 2s ease-in-out infinite' : 'none',
+    animation: isActive ? 'pulse-dot 2s ease-in-out infinite' : 'none',
   }),
   progressBar: {
     width: '100%',
@@ -275,7 +275,7 @@ const S = {
     padding: '7px 0',
     borderBottom: '1px solid var(--border)',
   },
-  gestureLabel: { fontSize: '11px', flex: '1 1 auto', whiteSpace: 'nowrap', color: 'var(--muted)' },
+  gestureLabel: { fontFamily: 'var(--font-ui)', fontSize: '12px', flex: '1 1 auto', whiteSpace: 'nowrap', color: 'var(--text)' },
   gestureSelect: { flex: '0 0 128px' },
 
   onboardWrap: {
@@ -296,7 +296,7 @@ const S = {
     fontFamily: 'var(--font-heading)',
     fontSize: '32px',
     fontWeight: 800,
-    color: 'var(--accent)',
+    color: 'var(--text)',
     margin: '0 0 4px',
     letterSpacing: '-0.03em',
   },
@@ -308,32 +308,32 @@ const S = {
     margin: '0 0 8px',
   },
   onboardSub: {
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-ui)',
     fontSize: '14px',
     color: 'var(--text)',
     margin: '0 0 12px',
   },
   onboardText: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '12px',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '13px',
     color: 'var(--muted)',
-    lineHeight: 1.7,
+    lineHeight: 1.65,
     margin: '0 0 16px',
   },
   onboardNote: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '11px',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '12px',
     color: 'var(--muted)',
     fontStyle: 'italic',
     lineHeight: 1.6,
     margin: '0 0 16px',
   },
   onboardBtn: {
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-ui)',
     fontSize: '14px',
     fontWeight: 600,
-    background: 'var(--accent)',
-    color: '#0a0a0a',
+    background: 'var(--text)',
+    color: '#0e0e0e',
     height: '48px',
     borderRadius: '12px',
     border: 'none',
@@ -704,18 +704,18 @@ function NoTabState() {
             borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
             <div style={{
-              width: '30px', height: '30px',
-              background: 'var(--accent-dim)',
-              border: '1px solid rgba(100,255,218,0.15)',
+              width: '28px', height: '28px',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
               borderRadius: '8px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '14px', color: 'var(--accent)', flexShrink: 0,
+              fontSize: '13px', color: 'var(--muted)', flexShrink: 0,
             }}>
               {icon}
             </div>
             <span style={{
               fontSize: '12px', color: 'var(--muted)',
-              lineHeight: 1.4, textAlign: 'left', fontFamily: 'var(--font-mono)',
+              lineHeight: 1.4, textAlign: 'left', fontFamily: 'var(--font-ui)',
             }}>
               {text}
             </span>
@@ -748,15 +748,14 @@ function OnboardStep1({ onNext }) {
       <div style={{ textAlign: 'center' }}>
         <div style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: '68px', height: '68px',
-          background: 'rgba(100,255,218,0.06)',
-          border: '1px solid rgba(100,255,218,0.18)',
-          borderRadius: '20px',
+          width: '60px', height: '60px',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: '18px',
           marginBottom: '16px',
         }}>
-          {/* Head-with-arrows icon — evokes gesture control */}
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none"
-            stroke="#64FFDA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+            stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="8" r="4" />
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
             <path d="M19 3l2 2-2 2" />
@@ -765,7 +764,7 @@ function OnboardStep1({ onNext }) {
         </div>
         <h1 style={{ ...S.onboardTitle, textAlign: 'center' }}>Nodex</h1>
         <p style={{
-          fontFamily: 'var(--font-mono)', fontSize: '13px',
+          fontFamily: 'var(--font-ui)', fontSize: '13px',
           color: 'var(--muted)', margin: '4px 0 0',
         }}>
           Hands-free YouTube — on any webcam
@@ -773,12 +772,12 @@ function OnboardStep1({ onNext }) {
       </div>
 
       {/* Feature cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {[
           {
             icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="#64FFDA" strokeWidth="1.5" strokeLinecap="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
                 <path d="M12 2L9 8H3l5 4-2 6 6-4 6 4-2-6 5-4h-6z" />
               </svg>
             ),
@@ -787,8 +786,8 @@ function OnboardStep1({ onNext }) {
           },
           {
             icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="#64FFDA" strokeWidth="1.5" strokeLinecap="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
@@ -798,27 +797,27 @@ function OnboardStep1({ onNext }) {
           },
           {
             icon: (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                stroke="#64FFDA" strokeWidth="1.5" strokeLinecap="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             ),
             title: 'Calibrates to you',
-            desc: 'Guided 2-min setup adapts thresholds to your face and head range.',
+            desc: 'Guided setup adapts thresholds to your face and head range.',
           },
         ].map(({ icon, title, desc }) => (
           <div key={title} style={{
-            display: 'flex', gap: '14px', alignItems: 'flex-start',
+            display: 'flex', gap: '12px', alignItems: 'flex-start',
             background: 'var(--surface)',
             border: '1px solid var(--border)',
-            borderRadius: '12px',
-            padding: '14px',
+            borderRadius: '10px',
+            padding: '12px',
           }}>
             <div style={{
-              width: '34px', height: '34px',
-              background: 'rgba(100,255,218,0.06)',
-              border: '1px solid rgba(100,255,218,0.15)',
-              borderRadius: '9px',
+              width: '30px', height: '30px',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
@@ -951,8 +950,12 @@ function OnboardStep4({ onComplete }) {
 
     const listener = (message) => {
       if (shouldIgnoreSidePanelMessage(message)) return
-      if (message.type !== MSG.COMMAND_EXECUTED) return
-      const g = message.gesture
+      // BLINK_DETECTED fires before command mapping so it works even if EYES_CLOSED
+      // is mapped to NONE or the tab has no video.
+      const g = message.type === MSG.BLINK_DETECTED
+        ? GESTURES.EYES_CLOSED
+        : message.type === MSG.COMMAND_EXECUTED ? message.gesture : null
+      if (!g) return
       setCompleted((prev) => {
         if (TUTORIAL_GESTURES.some((t) => t.gesture === g) && !prev.has(g)) {
           const next = new Set(prev)
@@ -1211,36 +1214,34 @@ function MainScreen({
           /* ── Never calibrated — eye blink gesture is effectively off ── */
           : (
             <div style={{
-              background: 'var(--accent-dim)',
-              border: '1px solid var(--accent)',
+              background: 'rgba(91,255,216,0.06)',
+              border: '1px solid rgba(91,255,216,0.3)',
               borderRadius: '12px',
               padding: '16px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                {/* Eye icon */}
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  stroke="var(--accent-active)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                   style={{ flexShrink: 0 }}>
                   <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
                   <circle cx="12" cy="12" r="3"/>
                 </svg>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-active)' }}>
                   Eye blink is not set up
                 </span>
               </div>
               <div style={{
-                fontSize: '11px', fontFamily: 'var(--font-mono)',
-                color: 'var(--text)', lineHeight: 1.6, marginBottom: '12px',
+                fontSize: '12px', fontFamily: 'var(--font-ui)',
+                color: 'var(--muted)', lineHeight: 1.6, marginBottom: '12px',
               }}>
-                The eye-close gesture won't work reliably without a short calibration that learns your eyes. Takes about 30 seconds.
+                A 30-second calibration makes blink detection reliable for your eyes.
               </div>
               <button onClick={onGoCalibrate} style={{
-                width: '100%', fontFamily: 'var(--font-mono)',
-                fontSize: '12px', fontWeight: 700,
-                background: 'var(--accent)', color: '#0a0a0a',
+                width: '100%', fontFamily: 'var(--font-ui)',
+                fontSize: '12px', fontWeight: 600,
+                background: 'var(--accent-active)', color: '#0a0a0a',
                 border: 'none', borderRadius: '8px',
                 padding: '9px 0', cursor: 'pointer',
-                letterSpacing: '0.01em',
               }}>
                 Set up eye blink — 30 sec
               </button>
@@ -1266,16 +1267,11 @@ function MainScreen({
           {running && modelReady && (
             <span style={{
               marginLeft: 'auto',
-              fontSize: '10px',
-              fontFamily: 'var(--font-mono)',
-              color: browseMode ? 'var(--accent)' : 'var(--muted)',
-              background: browseMode ? 'var(--accent-dim)' : 'var(--surface-2)',
-              border: `1px solid ${browseMode ? 'rgba(200,245,90,0.25)' : 'var(--border)'}`,
-              borderRadius: '20px',
-              padding: '2px 8px',
-              letterSpacing: '0.04em',
+              fontSize: '11px',
+              fontFamily: 'var(--font-ui)',
+              color: browseMode ? 'var(--accent-active)' : 'var(--muted)',
             }}>
-              {browseMode ? 'BROWSE' : 'PLAYER'}
+              {browseMode ? 'Browse' : 'Player'}
             </span>
           )}
         </div>
@@ -1330,16 +1326,16 @@ function MainScreen({
                 width: 'auto',
                 flex: '0 0 auto',
                 padding: '10px 14px',
-                background: browseMode ? 'var(--accent-dim)' : 'var(--surface-2)',
-                color: browseMode ? 'var(--accent)' : 'var(--muted)',
-                border: `1px solid ${browseMode ? 'rgba(200,245,90,0.25)' : 'var(--border)'}`,
+                background: browseMode ? 'rgba(91,255,216,0.08)' : 'transparent',
+                color: browseMode ? 'var(--accent-active)' : 'var(--muted)',
+                border: `1px solid ${browseMode ? 'rgba(91,255,216,0.25)' : 'var(--border)'}`,
                 opacity: modeChanging ? 0.5 : 1,
                 fontSize: '11px',
               }}
               onClick={onModeToggle}
               disabled={modeChanging}
             >
-              {browseMode ? '▶ Player' : '⊞ Browse'}
+              {browseMode ? 'Player' : 'Browse'}
             </button>
           )}
         </div>
@@ -1358,40 +1354,23 @@ function MainScreen({
 
       {/* Idle hint — shown when engine is off, not starting, no prior command this session */}
       {!running && !isStarting && !lastCommand && !startError && (
-        <div style={{
-          ...S.card,
-          display: 'flex', flexDirection: 'column', gap: '12px',
-        }}>
-          <div style={S.subheading}>Quick gestures</div>
+        <div style={S.card}>
+          <div style={S.subheading}>Default gestures</div>
           {[
-            { symbol: '↔', label: 'Head left / right', cmd: 'Rewind / Skip 5 s' },
-            { symbol: '↕', label: 'Head up / down',   cmd: 'Volume up / down' },
-            { symbol: '◉', label: 'Hold eyes closed',  cmd: 'Play / Pause' },
-          ].map(({ symbol, label, cmd }) => (
-            <div key={label} style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
+            ['Head left / right', 'Rewind / Skip'],
+            ['Head up / down',    'Volume'],
+            ['Tilt left / right', 'Prev / Next'],
+            ['Eyes closed',       'Play / Pause'],
+          ].map(([gesture, cmd]) => (
+            <div key={gesture} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '8px 0',
               borderBottom: '1px solid var(--border)',
             }}>
-              <div style={{
-                width: '30px', height: '30px',
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '15px', color: 'var(--accent)', flexShrink: 0,
-              }}>
-                {symbol}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '11px', color: 'var(--text)', marginBottom: '1px' }}>{label}</div>
-                <div style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</div>
-              </div>
+              <span style={{ fontSize: '12px', color: 'var(--text)' }}>{gesture}</span>
+              <span style={{ fontSize: '12px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</span>
             </div>
           ))}
-          <p style={{ fontSize: '10px', color: '#383838', fontFamily: 'var(--font-mono)', margin: 0, textAlign: 'center' }}>
-            Start the engine to activate gesture control
-          </p>
         </div>
       )}
 
@@ -1450,52 +1429,41 @@ function MainScreen({
 function FirstLaunchHint({ onCalibrate, onSkip }) {
   return (
     <div style={{
-      background: 'rgba(100,255,218,0.05)',
-      border: '1px solid rgba(100,255,218,0.22)',
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
       borderRadius: '12px',
       padding: '16px',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '8px' }}>
-        <div style={{
-          width: '28px', height: '28px', flexShrink: 0,
-          background: 'rgba(100,255,218,0.08)',
-          border: '1px solid rgba(100,255,218,0.18)',
-          borderRadius: '8px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {/* Eye icon */}
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-        </div>
-        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>
           Set up blink detection first
         </span>
       </div>
 
       {/* Body */}
       <p style={{
-        fontSize: '11px', fontFamily: 'var(--font-mono)',
-        color: 'var(--muted)', lineHeight: 1.65, margin: '0 0 12px',
+        fontSize: '12px', fontFamily: 'var(--font-ui)',
+        color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 12px',
       }}>
-        A 30-second calibration teaches Nodex your eye range — making eye-close detection
-        reliable from the first use. Without it, detection falls back to generic thresholds
-        that may not match your eyes.
+        A 30-second calibration makes eye-close detection reliable for your specific eyes.
       </p>
 
       {/* CTA */}
       <button
         onClick={onCalibrate}
         style={{
-          width: '100%', fontFamily: 'var(--font-mono)',
-          fontSize: '12px', fontWeight: 700,
-          background: 'var(--accent)', color: '#0a0a0a',
+          width: '100%', fontFamily: 'var(--font-ui)',
+          fontSize: '12px', fontWeight: 600,
+          background: 'var(--text)', color: '#0e0e0e',
           border: 'none', borderRadius: '8px',
           padding: '10px 0', cursor: 'pointer',
-          letterSpacing: '0.01em', marginBottom: '8px',
+          marginBottom: '8px',
         }}
       >
         Calibrate now — 30 sec
@@ -1857,14 +1825,8 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
               Auto-pause when you leave
             </div>
-            <div style={{
-              fontSize: '11px',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--muted)',
-              lineHeight: 1.5,
-            }}>
+            <div style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5 }}>
               Pauses after 2 s with no face in frame. Resumes when you return.
-              Great for cooking, gym, or any hands-busy moment.
             </div>
           </div>
         </label>
@@ -1898,10 +1860,8 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
               High-precision landmarks
             </div>
-            <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5 }}>
-              Uses MediaPipe's attention mesh (478 pts) for more accurate eye positions.
-              Improves blink detection, especially without calibration.
-              Applies after reloading the YouTube tab.
+            <div style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5 }}>
+              478-point mesh for more accurate eye tracking. Applies after reloading the YouTube tab.
             </div>
           </div>
         </label>
@@ -1910,9 +1870,8 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
       {/* ── Data management ── */}
       <div style={S.card}>
         <div style={S.subheading}>Data</div>
-        <p style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '12px' }}>
-          Nodex stores calibration data and settings locally in your browser.
-          No data is sent to any server. You can clear everything below.
+        <p style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '12px' }}>
+          All data is stored locally. Nothing is sent to any server.
         </p>
         <button
           style={{

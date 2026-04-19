@@ -2,7 +2,8 @@ import { COMMANDS } from '../shared/constants/commands.js'
 
 /**
  * YouTube keyboard shortcut map.
- * All commands arrive here after BACK and PREV are intercepted by NodexPageScoped._safeGoBack().
+ * BACK is intercepted in NodexPageScoped.handleCommand() and never reaches here.
+ * PREV and PLAY/PAUSE are handled inline in execute() before reaching KEY_MAP.
  */
 const KEY_MAP = {
   [COMMANDS.PLAY]:       { key: 'k',       code: 'KeyK',    keyCode: 75 },
@@ -47,6 +48,31 @@ export class YouTubeController {
     // During ads: only pass through volume / mute — block everything else.
     // This prevents accidental seek/skip while still letting the user control audio.
     if (isAdPlaying() && !AD_SAFE_COMMANDS.has(command)) return false
+
+    // PREV clicks the player's previous-video button — only present in playlists.
+    // Do NOT fall through to _sendKey: there is no reliable keyboard shortcut for this
+    // in YouTube, and the old code called _safeGoBack() which navigated away from the page.
+    if (command === COMMANDS.PREV) {
+      const prevBtn = document.querySelector('.ytp-prev-button')
+      if (prevBtn) {
+        prevBtn.click()
+        return true
+      }
+      return false // Not in a playlist — do nothing rather than navigate away
+    }
+
+    // PLAY and PAUSE use the video element directly so they are not toggles —
+    // 'k' key always toggles regardless of current state, which makes PLAY behave
+    // identically to PAUSE. The video element API gives us true one-way control.
+    if (command === COMMANDS.PLAY || command === COMMANDS.PAUSE) {
+      const video = document.querySelector('video')
+      if (video) {
+        if (command === COMMANDS.PLAY) video.play().catch(() => {})
+        else video.pause()
+        return true
+      }
+      // No video element found — fall through to key dispatch as best-effort.
+    }
 
     const mapping = KEY_MAP[command]
     if (!mapping) return false

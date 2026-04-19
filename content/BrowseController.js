@@ -620,7 +620,7 @@ export class BrowseController {
       ring.style.boxShadow = '0 0 0 4px rgba(100, 255, 218, 0.2)'
       setTimeout(() => {
         if (!this._focusRing || this._destroyed) return
-        ring.style.transition = 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out'
+        ring.style.transition = 'top 0.15s ease-out, left 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out'
       }, 180)
     }, 120)
   }
@@ -721,7 +721,7 @@ export class BrowseController {
       border: '3px solid #64FFDA',
       borderRadius: '12px',
       boxShadow: '0 0 0 4px rgba(100, 255, 218, 0.2)',
-      transition: 'top 0.2s ease-out, left 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out',
+      transition: 'top 0.15s ease-out, left 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out',
       display: 'none',
     })
     const root = document.body || document.documentElement
@@ -1301,12 +1301,21 @@ export class BrowseController {
 
   _trackScrollPosition() {
     clearTimeout(this._scrollTrackTimer)
+    // Disable transition while page is scrolling — with it on, the ring "chases"
+    // the card on every RAF update instead of snapping instantly to its position.
+    if (this._focusRing) this._focusRing.style.transition = 'none'
     const start = Date.now()
     const tick = () => {
       if (this._destroyed) return
       if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
       if (Date.now() - start < SCROLL_TRACK_MS) {
         this._scrollTrackTimer = setTimeout(tick, 16)
+      } else {
+        // Scroll settled — restore smooth transition for the next gesture move.
+        if (this._focusRing) {
+          this._focusRing.style.transition =
+            'top 0.15s ease-out, left 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out'
+        }
       }
     }
     tick()
@@ -1342,7 +1351,11 @@ export class BrowseController {
     this._scrollRaf = requestAnimationFrame(() => {
       this._scrollRaf = null
       if (this._destroyed) return
-      if (this._focusIndex >= 0) this._highlightItem(this._focusIndex)
+      if (this._focusIndex >= 0) {
+        // Snap during user scroll — no transition so ring stays locked to card.
+        if (this._focusRing) this._focusRing.style.transition = 'none'
+        this._highlightItem(this._focusIndex)
+      }
     })
   }
 }

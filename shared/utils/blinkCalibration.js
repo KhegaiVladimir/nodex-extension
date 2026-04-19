@@ -82,7 +82,7 @@ export function computeBlinkThreshold(openSamples, closedSamples) {
   const earClosed = medianOf(cFilt)
   const range = earOpen - earClosed
 
-  if (range < 0.04) {
+  if (range < 0.02) {
     return { ok: false, reason: 'insufficient_range' }
   }
 
@@ -99,9 +99,11 @@ export function computeBlinkThreshold(openSamples, closedSamples) {
     threshold = earClosed + range * 0.5
   }
   threshold = Math.min(threshold, earOpen * 0.85)
-  // exitThreshold must be independent of the calibrated threshold so it sits
-  // firmly in the open-eye zone: earClosed + 72% of range, capped at earOpen*0.92.
-  const exitThreshold = Math.min(earClosed + range * 0.72, earOpen * 0.92)
+  // exitThreshold sits just above threshold — narrow dead zone (~0.03) so the
+  // signal crosses it in 1–2 frames when eyes open. A wide dead zone (old: 72%
+  // of range) caused the open-eye EAR to never reach exitThreshold when the
+  // user's posture or lighting changed slightly between calibration and use.
+  const exitThreshold = Math.min(threshold + 0.03, earOpen * 0.80)
   const noiseFloor = standardDeviation(oFilt)
 
   return {

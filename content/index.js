@@ -1,5 +1,6 @@
 import { BRIDGE_WINDOW, MSG } from '../shared/constants/messages.js'
 import { COMMANDS } from '../shared/constants/commands.js'
+import { GESTURES } from '../shared/constants/gestures.js'
 import {
   PLAYER_GESTURE_MAP,
   BROWSE_GESTURE_MAP,
@@ -143,6 +144,14 @@ class NodexPageScoped {
       P._tutorialMode = false
     }
     if (document.visibilityState === 'hidden') return
+
+    // In tutorial mode, blink detection must fire regardless of command mapping
+    // (gesture could be mapped to NONE). Emit BLINK_DETECTED for the tutorial step
+    // before the NONE guard so the step always advances on a valid blink.
+    if (P._tutorialMode && gesture === GESTURES.EYES_CLOSED) {
+      P._sendToSidePanel({ type: MSG.BLINK_DETECTED, tutorial: true })
+    }
+
     if (cmd === COMMANDS.NONE) return
 
     if (P._tutorialMode) {
@@ -160,9 +169,14 @@ class NodexPageScoped {
 
     let applied = false
 
-    if (cmd === COMMANDS.BACK || cmd === COMMANDS.PREV) {
+    if (cmd === COMMANDS.BACK) {
+      // Navigate back in YouTube history — Browse mode use case.
       this._safeGoBack()
       applied = true
+    } else if (cmd === COMMANDS.PREV) {
+      // Previous video in playlist — Player mode use case.
+      // Handled by YouTubeController via the player's prev button; does NOT navigate the page.
+      applied = !!this._ytController.execute(cmd)
     } else if (cmd === COMMANDS.TOGGLE_MODE) {
       // Switch Player ↔ Browse mode via gesture.
       // _manualModeOverride prevents _autoSetMode from overriding this on next nav.

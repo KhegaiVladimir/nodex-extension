@@ -216,9 +216,10 @@ function speakCloseEyesCountdown() {
     window.speechSynthesis.speak(x)
   }
   u('Close your eyes.')
-  window.setTimeout(() => u('Two'), 700)
-  window.setTimeout(() => u('One'), 1400)
-  window.setTimeout(() => u('Open'), 2000)
+  window.setTimeout(() => u('Three'), 700)
+  window.setTimeout(() => u('Two'), 1400)
+  window.setTimeout(() => u('One'), 2100)
+  window.setTimeout(() => u('Open'), 2800)
 }
 
 function EyesClosedStep({ sendToContent, shouldIgnoreSidePanelMessage, openSamples, onComplete, onRetryClosed }) {
@@ -253,7 +254,7 @@ function EyesClosedStep({ sendToContent, shouldIgnoreSidePanelMessage, openSampl
         return
       }
       onComplete({ earCalibration: result })
-    }, 2000)
+    }, 3000)
   }, [openSamples, onComplete])
 
   if (phase === 'fail') {
