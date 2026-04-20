@@ -127,70 +127,62 @@ const BROWSE_COMMANDS = [
   COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.TOGGLE_MODE, COMMANDS.NONE,
 ]
 
-const TUTORIAL_GESTURES = [
-  { label: 'Turn your head left',       gesture: GESTURES.HEAD_LEFT },
-  { label: 'Turn your head right',      gesture: GESTURES.HEAD_RIGHT },
-  { label: 'Tilt your head up',       gesture: GESTURES.HEAD_UP },
-  { label: 'Close your eyes for 0.5s',   gesture: GESTURES.EYES_CLOSED },
-]
-
 /* ── styles ── */
 
 const S = {
   app: {
-    padding: '14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
     minHeight: '100vh',
     background: 'var(--bg)',
   },
-  heading: {
+
+  // ── Header bar ──
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 16px 0',
+  },
+  logo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  logoMark: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '6px',
+    background: 'var(--accent)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
     fontFamily: 'var(--font-heading)',
-    fontSize: '20px',
+    fontSize: '14px',
     fontWeight: 700,
     color: 'var(--text)',
-    margin: 0,
-    letterSpacing: '-0.01em',
+    letterSpacing: '0.06em',
   },
-  subheading: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '11px',
-    fontWeight: 500,
+  versionBadge: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '10px',
     color: 'var(--muted)',
-    marginBottom: '10px',
-    letterSpacing: '0.01em',
-  },
-  card: {
-    background: 'var(--surface)',
+    background: 'var(--surface-2)',
     border: '1px solid var(--border)',
-    borderRadius: '12px',
-    padding: '16px',
+    borderRadius: '4px',
+    padding: '2px 6px',
+    letterSpacing: '0.02em',
   },
-  btn: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '13px',
-    fontWeight: 600,
-    padding: '10px 0',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    width: '100%',
-    transition: 'opacity 0.15s',
-    letterSpacing: '0.01em',
-  },
-  btnPrimary: {
-    background: 'var(--text)',
-    color: '#0e0e0e',
-  },
-  btnSecondary: {
-    background: 'transparent',
-    color: 'var(--muted)',
-    border: '1px solid var(--border)',
+
+  // ── Nav tabs ──
+  navWrap: {
+    padding: '12px 16px 0',
   },
   nav: {
     display: 'flex',
-    gap: '3px',
+    gap: '2px',
     background: 'var(--surface)',
     border: '1px solid var(--border)',
     borderRadius: '10px',
@@ -200,20 +192,111 @@ const S = {
     flex: 1,
     fontFamily: 'var(--font-ui)',
     fontSize: '12px',
+    fontWeight: 500,
     padding: '7px 0',
     border: 'none',
     borderRadius: '7px',
     cursor: 'pointer',
     background: 'transparent',
     color: 'var(--muted)',
-    transition: 'all 0.15s',
+    transition: 'all 0.18s',
+    letterSpacing: '0.01em',
   },
   navBtnActive: {
-    background: 'var(--surface-2)',
+    background: 'var(--surface-3)',
     color: 'var(--text)',
     fontWeight: 600,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
   },
-  metricLabel: { color: 'var(--muted)', fontSize: '11px' },
+
+  // ── Content area ──
+  content: {
+    padding: '12px 16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    flex: 1,
+  },
+
+  // ── Cards ──
+  card: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    padding: '16px',
+  },
+  cardFlush: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    overflow: 'hidden',
+  },
+
+  // ── Section labels ──
+  sectionLabel: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: '10px',
+    fontWeight: 600,
+    color: 'var(--muted)',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    marginBottom: '10px',
+  },
+
+  // ── Buttons ──
+  btn: {
+    fontFamily: 'var(--font-ui)',
+    fontSize: '13px',
+    fontWeight: 600,
+    padding: '10px 0',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+    width: '100%',
+    transition: 'opacity 0.15s, background 0.15s',
+    letterSpacing: '0.01em',
+  },
+  btnPrimary: {
+    background: 'var(--accent)',
+    color: '#060f0c',
+  },
+  btnStop: {
+    background: 'var(--surface-3)',
+    color: 'var(--text-2)',
+    border: '1px solid var(--border-mid)',
+  },
+  btnSecondary: {
+    background: 'transparent',
+    color: 'var(--muted)',
+    border: '1px solid var(--border)',
+  },
+  btnGhost: {
+    background: 'transparent',
+    color: 'var(--muted)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    padding: '9px 14px',
+    fontFamily: 'var(--font-ui)',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    letterSpacing: '0.01em',
+  },
+
+  // ── Status dot ──
+  dot: (isActive, isLoading = false) => ({
+    display: 'inline-block',
+    width: '7px',
+    height: '7px',
+    borderRadius: '50%',
+    flexShrink: 0,
+    background: isActive ? 'var(--green)' : isLoading ? 'var(--amber)' : 'var(--muted)',
+    animation: isActive ? 'pulse-dot 2.4s ease-in-out infinite' : 'none',
+  }),
+
+  // ── Metric tiles ──
+  metricLabel: { color: 'var(--muted)', fontSize: '10px', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' },
   metricValue: {
     color: 'var(--accent)',
     fontWeight: 600,
@@ -223,12 +306,14 @@ const S = {
   metricTile: {
     background: 'var(--bg)',
     border: '1px solid var(--border)',
-    borderRadius: '8px',
+    borderRadius: 'var(--radius-sm)',
     padding: '8px 10px',
     display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    gap: '3px',
   },
+
+  // ── Select ──
   select: {
     fontFamily: 'var(--font-ui)',
     fontSize: '12px',
@@ -239,150 +324,53 @@ const S = {
     padding: '6px 8px',
     width: '100%',
     outline: 'none',
+    transition: 'border-color 0.15s',
   },
-  // isActive = fully running (first landmark received)
-  // isLoading = camera started but model not ready yet / starting up
-  status: (isActive, isLoading = false) => ({
-    display: 'inline-block',
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    flexShrink: 0,
-    background: isActive ? '#4ade80' : isLoading ? '#f59e0b' : '#404040',
-    marginRight: '8px',
-    animation: isActive ? 'pulse-dot 2s ease-in-out infinite' : 'none',
-  }),
-  progressBar: {
-    width: '100%',
-    height: '4px',
-    background: 'var(--border)',
-    borderRadius: '2px',
-    overflow: 'hidden',
-    marginTop: '12px',
-  },
-  progressFill: (pct) => ({
-    width: `${pct}%`,
-    height: '100%',
-    background: 'var(--accent)',
-    transition: 'width 0.2s',
-    borderRadius: '2px',
-  }),
+
+  // ── Gesture table ──
   gestureRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    padding: '7px 0',
+    padding: '8px 0',
     borderBottom: '1px solid var(--border)',
   },
-  gestureLabel: { fontFamily: 'var(--font-ui)', fontSize: '12px', flex: '1 1 auto', whiteSpace: 'nowrap', color: 'var(--text)' },
-  gestureSelect: { flex: '0 0 128px' },
-
-  onboardWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '24px',
-    gap: '20px',
-    minHeight: '100vh',
-    justifyContent: 'center',
-  },
-  onboardCard: {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: '14px',
-    padding: '24px',
-  },
-  onboardTitle: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: '32px',
-    fontWeight: 800,
-    color: 'var(--text)',
-    margin: '0 0 4px',
-    letterSpacing: '-0.03em',
-  },
-  onboardHeading: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: '16px',
-    fontWeight: 700,
-    color: 'var(--text)',
-    margin: '0 0 8px',
-  },
-  onboardSub: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '14px',
-    color: 'var(--text)',
-    margin: '0 0 12px',
-  },
-  onboardText: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '13px',
-    color: 'var(--muted)',
-    lineHeight: 1.65,
-    margin: '0 0 16px',
-  },
-  onboardNote: {
+  gestureLabel: {
     fontFamily: 'var(--font-ui)',
     fontSize: '12px',
-    color: 'var(--muted)',
-    fontStyle: 'italic',
-    lineHeight: 1.6,
-    margin: '0 0 16px',
+    flex: '1 1 auto',
+    whiteSpace: 'nowrap',
+    color: 'var(--text-2)',
   },
-  onboardBtn: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '14px',
-    fontWeight: 600,
-    background: 'var(--text)',
-    color: '#0e0e0e',
-    height: '48px',
-    borderRadius: '12px',
-    border: 'none',
-    width: '100%',
-    cursor: 'pointer',
-    transition: 'opacity 0.15s',
-    letterSpacing: '0.01em',
+  gestureSelect: { flex: '0 0 128px' },
+
+  // ── Divider ──
+  divider: {
+    height: '1px',
+    background: 'var(--border)',
+    margin: '12px 0',
   },
-  onboardStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginTop: '12px',
+
+  // ── Progress ──
+  progressBar: {
+    width: '100%', height: '3px',
+    background: 'var(--border)',
+    borderRadius: '2px',
+    overflow: 'hidden',
+    marginTop: '10px',
   },
-  onboardGestureRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '10px 0',
-    borderBottom: '1px solid var(--border)',
-  },
-  onboardCheck: {
-    color: 'var(--accent)',
-    fontWeight: 700,
-    fontSize: '16px',
-  },
-  onboardSkip: {
-    fontFamily: 'var(--font-mono)',
-    color: 'var(--muted)',
-    fontSize: '11px',
-    textDecoration: 'underline',
-    cursor: 'pointer',
-    marginTop: '16px',
-    background: 'none',
-    border: 'none',
-  },
-  onboardDot: {
-    display: 'inline-block',
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
+  progressFill: (pct) => ({
+    width: `${pct}%`, height: '100%',
     background: 'var(--accent)',
-  },
+    transition: 'width 0.2s',
+    borderRadius: '2px',
+  }),
 }
 
 /* ── App ── */
 
 export default function App() {
-  const [onboarded, setOnboarded] = useState(null)
   const [firstRunWizard, setFirstRunWizard] = useState(false)
   const [screen, setScreen] = useState('main')
   const [running, setRunning] = useState(false)
@@ -466,16 +454,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    Promise.all([loadSettings({}), loadCalibration()]).then(([settings, calibration]) => {
-      // Consider the user onboarded if either:
-      // (a) the explicit flag is set, OR
-      // (b) a calibration already exists (user clearly completed at least Step 3).
-      // The second path protects against the flag being lost to storage races.
-      const onboardedNow = Boolean(settings.onboarding_complete) || Boolean(calibration)
-      setOnboarded(onboardedNow)
-      if (onboardedNow && !settings.onboarding_complete) {
-        saveSettings({ onboarding_complete: true }).catch(() => {})
-      }
+    loadSettings({}).then((settings) => {
       setAutoPause(Boolean(settings.auto_pause_on_no_face))
     })
   }, [])
@@ -571,14 +550,6 @@ export default function App() {
   // launchCount=0 before the first start; =1 right after; >1 for returning users.
   const isFirstLaunch = launchCount != null && launchCount <= 1
 
-  if (onboarded === null) {
-    return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />
-  }
-
-  if (!onboarded) {
-    return <OnboardingFlow onComplete={() => setOnboarded(true)} />
-  }
-
   return (
     <div style={S.app}>
       {firstRunWizard && (
@@ -590,60 +561,71 @@ export default function App() {
         />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h1 style={S.heading}>Nodex</h1>
+      {/* ── Header ── */}
+      <div style={S.header}>
+        <div style={S.logo}>
+          <div style={S.logoMark}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#060f0c" strokeWidth="0"/>
+              <path d="M2 17l10 5 10-5" stroke="#060f0c" strokeWidth="2.5" strokeLinecap="round"/>
+              <path d="M2 12l10 5 10-5" stroke="#060f0c" strokeWidth="2.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <span style={S.logoText}>NODEX</span>
+        </div>
+        <span style={S.versionBadge}>v1.1</span>
       </div>
 
-      <div style={S.nav}>
-        {['main', 'calibration', 'settings'].map((s) => (
-          <button
-            key={s}
-            style={{
-              ...S.navBtn,
-              ...(screen === s ? S.navBtnActive : {}),
-            }}
-            onClick={() => {
-              // Navigating to Calibration clears the blink alert so that on return
-              // to Home the auto-navigate effect doesn't re-trigger (its ref resets
-              // when MainScreen unmounts).
-              if (s === 'calibration') setBlinkCalibNeeded(false)
-              setScreen(s)
-            }}
-          >
-            {{ main: 'Home', calibration: 'Calibrate', settings: 'Settings' }[s]}
-          </button>
-        ))}
+      {/* ── Nav ── */}
+      <div style={S.navWrap}>
+        <div style={S.nav}>
+          {['main', 'calibration', 'settings'].map((s) => (
+            <button
+              key={s}
+              style={{ ...S.navBtn, ...(screen === s ? S.navBtnActive : {}) }}
+              onClick={() => {
+                if (s === 'calibration') setBlinkCalibNeeded(false)
+                setScreen(s)
+              }}
+            >
+              {{ main: 'Home', calibration: 'Calibrate', settings: 'Settings' }[s]}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {screen === 'main' && activeTabId === null && <NoTabState />}
-      {screen === 'main' && activeTabId !== null && (
-        <MainScreen
-          running={running}
-          browseMode={browseMode}
-          modeChanging={modeChanging}
-          onModeToggle={() => {
-            if (modeChanging) return
-            setModeChanging(true)
-            sendToContent({ type: MSG.TOGGLE_BROWSE_MODE })
-            setTimeout(() => setModeChanging(false), 2000)
-          }}
-          metrics={metrics}
-          lastCommand={lastCommand}
-          blinkCalibNeeded={blinkCalibNeeded}
-          onDismissBlinkAlert={() => setBlinkCalibNeeded(false)}
-          onGoCalibrate={handleGoCalibrate}
-          isFirstLaunch={isFirstLaunch}
-          firstLaunchHintDismissed={firstLaunchHintDismissed}
-          onDismissFirstLaunchHint={() => setFirstLaunchHintDismissed(true)}
-          autoNavFiredRef={autoNavFiredRef}
-        />
-      )}
-      {screen === 'calibration' && (
-        <CalibrationScreen running={running} sendToContent={sendToContent} />
-      )}
-      {screen === 'settings' && (
-        <SettingsScreen autoPause={autoPause} onAutoPauseToggle={handleAutoPauseToggle} />
-      )}
+      {/* ── Content ── */}
+      <div style={S.content}>
+        {screen === 'main' && activeTabId === null && <NoTabState />}
+        {screen === 'main' && activeTabId !== null && (
+          <MainScreen
+            running={running}
+            browseMode={browseMode}
+            modeChanging={modeChanging}
+            onModeToggle={() => {
+              if (modeChanging) return
+              setModeChanging(true)
+              sendToContent({ type: MSG.TOGGLE_BROWSE_MODE })
+              setTimeout(() => setModeChanging(false), 2000)
+            }}
+            metrics={metrics}
+            lastCommand={lastCommand}
+            blinkCalibNeeded={blinkCalibNeeded}
+            onDismissBlinkAlert={() => setBlinkCalibNeeded(false)}
+            onGoCalibrate={handleGoCalibrate}
+            isFirstLaunch={isFirstLaunch}
+            firstLaunchHintDismissed={firstLaunchHintDismissed}
+            onDismissFirstLaunchHint={() => setFirstLaunchHintDismissed(true)}
+            autoNavFiredRef={autoNavFiredRef}
+          />
+        )}
+        {screen === 'calibration' && (
+          <CalibrationScreen running={running} sendToContent={sendToContent} />
+        )}
+        {screen === 'settings' && (
+          <SettingsScreen autoPause={autoPause} onAutoPauseToggle={handleAutoPauseToggle} />
+        )}
+      </div>
     </div>
   )
 }
@@ -652,373 +634,59 @@ export default function App() {
 
 function NoTabState() {
   return (
-    <div style={{
+    <div className="fade-in" style={{
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      minHeight: 'calc(100vh - 120px)',
-      gap: '24px', padding: '0 4px', textAlign: 'center',
+      minHeight: 'calc(100vh - 140px)',
+      gap: '20px', textAlign: 'center',
     }}>
-      {/* Monitor icon */}
       <div style={{
-        width: '72px', height: '72px',
+        width: '56px', height: '56px',
         background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '20px',
+        border: '1px solid var(--border-mid)',
+        borderRadius: '16px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
-          stroke="#303030" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+          stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="3" width="20" height="14" rx="2" />
           <path d="M8 21h8M12 17v4" />
         </svg>
       </div>
 
       <div>
-        <p style={{
-          fontFamily: 'var(--font-heading)', fontSize: '17px',
-          fontWeight: 700, color: 'var(--text)', margin: '0 0 8px',
-        }}>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', margin: '0 0 6px' }}>
           No YouTube tab open
         </p>
-        <p style={{
-          fontFamily: 'var(--font-mono)', fontSize: '12px',
-          color: 'var(--muted)', lineHeight: 1.6, maxWidth: '210px', margin: '0 auto',
-        }}>
-          Nodex needs an active YouTube tab to control playback.
+        <p style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, maxWidth: '200px', margin: '0 auto' }}>
+          Switch to a YouTube tab to activate Nodex.
         </p>
       </div>
 
-      {/* Steps */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: '12px', padding: '4px 0', width: '100%',
+        borderRadius: 'var(--radius-md)', width: '100%', overflow: 'hidden',
       }}>
         {[
-          { icon: '▶', text: 'Open youtube.com in any tab' },
-          { icon: '↑', text: 'Click Start in Nodex' },
-          { icon: '↔', text: 'Nod to control playback' },
-        ].map(({ icon, text }, i, arr) => (
-          <div key={i} style={{
+          ['01', 'Open youtube.com in any tab'],
+          ['02', 'Click Start here in Nodex'],
+          ['03', 'Nod your head to control playback'],
+        ].map(([num, text], i, arr) => (
+          <div key={num} style={{
             display: 'flex', gap: '12px', alignItems: 'center',
-            padding: '10px 16px',
+            padding: '11px 14px',
             borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
-            <div style={{
-              width: '28px', height: '28px',
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '13px', color: 'var(--muted)', flexShrink: 0,
-            }}>
-              {icon}
-            </div>
             <span style={{
-              fontSize: '12px', color: 'var(--muted)',
-              lineHeight: 1.4, textAlign: 'left', fontFamily: 'var(--font-ui)',
-            }}>
+              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              color: 'var(--accent)', fontWeight: 700, flexShrink: 0,
+              opacity: 0.7,
+            }}>{num}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-2)', lineHeight: 1.4, textAlign: 'left' }}>
               {text}
             </span>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-/* ── Onboarding Flow ── */
-
-function OnboardingFlow({ onComplete }) {
-  const [step, setStep] = useState(1)
-  const next = useCallback(() => setStep((s) => s + 1), [])
-
-  if (step === 1) return <OnboardStep1 onNext={next} />
-  if (step === 2) return <OnboardStep2 onNext={next} />
-  if (step === 3) return <OnboardStep3 onNext={next} />
-  if (step === 4) return <OnboardStep4 onComplete={onComplete} />
-  return null
-}
-
-/* ── Step 1: Welcome ── */
-
-function OnboardStep1({ onNext }) {
-  return (
-    <div style={{ ...S.onboardWrap, gap: '16px' }}>
-      {/* Brand block */}
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: '60px', height: '60px',
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '18px',
-          marginBottom: '16px',
-        }}>
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
-            stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-            <path d="M19 3l2 2-2 2" />
-            <path d="M5 3L3 5l2 2" />
-          </svg>
-        </div>
-        <h1 style={{ ...S.onboardTitle, textAlign: 'center' }}>Nodex</h1>
-        <p style={{
-          fontFamily: 'var(--font-ui)', fontSize: '13px',
-          color: 'var(--muted)', margin: '4px 0 0',
-        }}>
-          Hands-free YouTube — on any webcam
-        </p>
-      </div>
-
-      {/* Feature cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {[
-          {
-            icon: (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
-                <path d="M12 2L9 8H3l5 4-2 6 6-4 6 4-2-6 5-4h-6z" />
-              </svg>
-            ),
-            title: 'Head gestures',
-            desc: 'Nod, tilt, turn — seek, volume, play/pause without touching anything',
-          },
-          {
-            icon: (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            ),
-            title: '100% on-device',
-            desc: 'MediaPipe runs in your browser. No video ever leaves your machine.',
-          },
-          {
-            icon: (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-            ),
-            title: 'Calibrates to you',
-            desc: 'Guided setup adapts thresholds to your face and head range.',
-          },
-        ].map(({ icon, title, desc }) => (
-          <div key={title} style={{
-            display: 'flex', gap: '12px', alignItems: 'flex-start',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '10px',
-            padding: '12px',
-          }}>
-            <div style={{
-              width: '30px', height: '30px',
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              {icon}
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>
-                {title}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.55, fontFamily: 'var(--font-mono)' }}>
-                {desc}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <button style={S.onboardBtn} onClick={onNext}>
-          Get started →
-        </button>
-        <p style={{
-          textAlign: 'center', fontSize: '10px', color: '#404040',
-          fontFamily: 'var(--font-mono)', marginTop: '10px',
-        }}>
-          Setup takes about 2 minutes
-        </p>
-      </div>
-    </div>
-  )
-}
-
-/* ── Step 2: Camera Permission ── */
-
-function OnboardStep2({ onNext }) {
-  const [status, setStatus] = useState('idle')
-
-  const handleStart = useCallback(() => {
-    if (status === 'waiting' || status === 'success') return
-    setStatus('waiting')
-    sendToContent({ type: MSG.START_ENGINE })
-
-    const timeout = setTimeout(() => {
-      chrome.runtime.onMessage.removeListener(listener)
-      setStatus((cur) => (cur === 'waiting' ? 'error' : cur))
-    }, 10000)
-
-    const listener = (message) => {
-      if (shouldIgnoreSidePanelMessage(message)) return
-      if (message.type === MSG.ENGINE_STATUS && message.running) {
-        clearTimeout(timeout)
-        chrome.runtime.onMessage.removeListener(listener)
-        setStatus('success')
-        setTimeout(onNext, 1500)
-      }
-    }
-    chrome.runtime.onMessage.addListener(listener)
-  }, [status, onNext])
-
-  return (
-    <div style={S.onboardWrap}>
-      <div style={S.onboardCard}>
-        <h2 style={S.onboardHeading}>Camera</h2>
-        <p style={S.onboardText}>
-          Open any YouTube video and tap the button below.
-        </p>
-        <p style={S.onboardNote}>
-          Nodex will ask for camera access — needed for gesture tracking.
-          The camera feed is not recorded or transmitted.
-        </p>
-        <button
-          style={{ ...S.onboardBtn, opacity: status === 'waiting' ? 0.6 : 1 }}
-          onClick={handleStart}
-          disabled={status === 'waiting' || status === 'success'}
-        >
-          Start engine
-        </button>
-
-        {status === 'waiting' && (
-          <div style={S.onboardStatus}>
-            <span style={S.onboardDot} />
-            <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Starting…</span>
-          </div>
-        )}
-        {status === 'success' && (
-          <div style={S.onboardStatus}>
-            <span style={{ ...S.onboardDot, background: '#4ade80' }} />
-            <span style={{ color: '#4ade80', fontSize: '12px' }}>Engine running</span>
-          </div>
-        )}
-        {status === 'error' && (
-          <div style={S.onboardStatus}>
-            <span style={{ color: '#ef4444', fontSize: '12px' }}>
-              Error: open a YouTube video and try again
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/* ── Step 3: Calibration (runs wizard inline so step 4 has a baseline) ── */
-
-function OnboardStep3({ onNext }) {
-  return (
-    <CalibrationWizard
-      mode="full"
-      sendToContent={sendToContent}
-      shouldIgnoreSidePanelMessage={shouldIgnoreSidePanelMessage}
-      onClose={onNext}
-    />
-  )
-}
-
-/* ── Step 4: Gesture Tutorial ── */
-
-function OnboardStep4({ onComplete }) {
-  const [completed, setCompleted] = useState(() => new Set())
-  const [showSkip, setShowSkip] = useState(false)
-  const allDone = completed.size === TUTORIAL_GESTURES.length
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSkip(true), 60000)
-    return () => clearTimeout(timer)
-  }, [])
-
-  useEffect(() => {
-    sendToContent({ type: MSG.TUTORIAL_START })
-
-    const listener = (message) => {
-      if (shouldIgnoreSidePanelMessage(message)) return
-      // BLINK_DETECTED fires before command mapping so it works even if EYES_CLOSED
-      // is mapped to NONE or the tab has no video.
-      const g = message.type === MSG.BLINK_DETECTED
-        ? GESTURES.EYES_CLOSED
-        : message.type === MSG.COMMAND_EXECUTED ? message.gesture : null
-      if (!g) return
-      setCompleted((prev) => {
-        if (TUTORIAL_GESTURES.some((t) => t.gesture === g) && !prev.has(g)) {
-          const next = new Set(prev)
-          next.add(g)
-          return next
-        }
-        return prev
-      })
-    }
-    chrome.runtime.onMessage.addListener(listener)
-    return () => {
-      chrome.runtime.onMessage.removeListener(listener)
-      sendToContent({ type: MSG.TUTORIAL_END })
-    }
-  }, [])
-
-  const handleFinish = useCallback(async () => {
-    await saveSettings({ onboarding_complete: true })
-    onComplete()
-  }, [onComplete])
-
-  return (
-    <div style={S.onboardWrap}>
-      <div style={S.onboardCard}>
-        <h2 style={S.onboardHeading}>Try the gestures</h2>
-        <p style={S.onboardText}>
-          Perform each gesture — Nodex will show what it recognized.
-        </p>
-
-        {TUTORIAL_GESTURES.map(({ label, gesture }) => (
-          <div key={gesture} style={S.onboardGestureRow}>
-            <span style={{ fontSize: '12px' }}>{label}</span>
-            <span
-              style={
-                completed.has(gesture)
-                  ? S.onboardCheck
-                  : { color: 'var(--muted)', fontSize: '16px' }
-              }
-            >
-              {completed.has(gesture) ? '✓' : '○'}
-            </span>
-          </div>
-        ))}
-
-        {allDone && (
-          <>
-            <p style={{ color: 'var(--accent)', fontSize: '14px', fontWeight: 700, marginTop: '16px' }}>
-              Great! Everything works.
-            </p>
-            <button
-              style={{ ...S.onboardBtn, marginTop: '12px' }}
-              onClick={handleFinish}
-            >
-              Go to Nodex →
-            </button>
-          </>
-        )}
-
-        {showSkip && !allDone && (
-          <button style={S.onboardSkip} onClick={handleFinish}>
-            Skip →
-          </button>
-        )}
       </div>
     </div>
   )
@@ -1168,169 +836,156 @@ function MainScreen({
     <>
       {/* ── Blink calibration alert ── */}
       {blinkCalibNeeded && (
-        hasAnyEarCalibration
-          /* ── Calibration exists but expired / mismatched ── */
-          ? (
-            <div style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '10px',
-              padding: '12px 14px',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '10px',
-            }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                stroke="var(--muted)" strokeWidth="2" strokeLinecap="round"
-                style={{ flexShrink: 0, marginTop: '2px' }}>
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-              </svg>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>
-                  Re-calibrate blink detection
-                </div>
-                <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', lineHeight: 1.5 }}>
-                  Your calibration has expired or no longer matches the current mode.
-                </div>
-                <button onClick={onGoCalibrate} style={{
-                  marginTop: '8px', fontFamily: 'var(--font-mono)',
-                  fontSize: '11px', fontWeight: 600,
-                  background: 'var(--surface-2)', color: 'var(--text)',
-                  border: '1px solid var(--border)', borderRadius: '6px',
-                  padding: '5px 12px', cursor: 'pointer',
-                }}>
-                  Re-calibrate →
-                </button>
+        hasAnyEarCalibration ? (
+          <div className="fade-in" style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-mid)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 14px',
+            display: 'flex', alignItems: 'flex-start', gap: '10px',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
+              style={{ flexShrink: 0, marginTop: '2px' }}>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
+            </svg>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
+                Blink calibration expired
               </div>
-              <button onClick={onDismissBlinkAlert} aria-label="Dismiss" style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--muted)', fontSize: '16px', lineHeight: 1,
-                padding: '0', flexShrink: 0,
-              }}>×</button>
-            </div>
-          )
-          /* ── Never calibrated — eye blink gesture is effectively off ── */
-          : (
-            <div style={{
-              background: 'rgba(91,255,216,0.06)',
-              border: '1px solid rgba(91,255,216,0.3)',
-              borderRadius: '12px',
-              padding: '16px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="var(--accent-active)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ flexShrink: 0 }}>
-                  <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-active)' }}>
-                  Eye blink is not set up
-                </span>
-              </div>
-              <div style={{
-                fontSize: '12px', fontFamily: 'var(--font-ui)',
-                color: 'var(--muted)', lineHeight: 1.6, marginBottom: '12px',
-              }}>
-                A 30-second calibration makes blink detection reliable for your eyes.
+              <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '8px' }}>
+                Recalibrate for accurate eye-close detection.
               </div>
               <button onClick={onGoCalibrate} style={{
-                width: '100%', fontFamily: 'var(--font-ui)',
-                fontSize: '12px', fontWeight: 600,
-                background: 'var(--accent-active)', color: '#0a0a0a',
-                border: 'none', borderRadius: '8px',
-                padding: '9px 0', cursor: 'pointer',
+                fontFamily: 'var(--font-ui)', fontSize: '11px', fontWeight: 600,
+                background: 'var(--surface-3)', color: 'var(--text)',
+                border: '1px solid var(--border-mid)', borderRadius: '6px',
+                padding: '5px 12px', cursor: 'pointer',
               }}>
-                Set up eye blink — 30 sec
-              </button>
-              <button onClick={onDismissBlinkAlert} style={{
-                display: 'block', margin: '8px auto 0',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: 'var(--font-mono)', fontSize: '10px',
-                color: 'var(--muted)', letterSpacing: '0.03em',
-              }}>
-                skip for now
+                Recalibrate →
               </button>
             </div>
-          )
+            <button onClick={onDismissBlinkAlert} aria-label="Dismiss" style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--muted)', fontSize: '18px', lineHeight: 1,
+              padding: '0', flexShrink: 0,
+            }}>×</button>
+          </div>
+        ) : (
+          <div className="fade-in" style={{
+            background: 'rgba(91,255,216,0.05)',
+            border: '1px solid rgba(91,255,216,0.2)',
+            borderRadius: 'var(--radius-md)', padding: '14px 16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
+                Eye blink not configured
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, marginBottom: '12px' }}>
+              30-second calibration makes blink detection reliable for your eyes.
+            </div>
+            <button onClick={onGoCalibrate} style={{
+              width: '100%', fontFamily: 'var(--font-ui)', fontSize: '12px', fontWeight: 600,
+              background: 'var(--accent)', color: '#060f0c',
+              border: 'none', borderRadius: 'var(--radius-sm)',
+              padding: '9px 0', cursor: 'pointer',
+            }}>
+              Set up eye blink — 30 sec
+            </button>
+            <button onClick={onDismissBlinkAlert} style={{
+              display: 'block', margin: '8px auto 0', background: 'none',
+              border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+              fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.03em',
+            }}>
+              skip for now
+            </button>
+          </div>
+        )
       )}
+
+      {/* ── Engine status card ── */}
       <div style={S.card}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-          <span style={S.status(running && modelReady, isStarting || (running && !modelReady))} />
-          <span style={{ fontWeight: 600, fontSize: '13px' }}>
+        {/* Status row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <span style={S.dot(running && modelReady, isStarting || (running && !modelReady))} />
+          <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)', flex: 1 }}>
             {running
               ? (modelReady ? 'Engine running' : 'Loading model…')
               : isStarting ? 'Starting…' : 'Engine stopped'}
           </span>
           {running && modelReady && (
             <span style={{
-              marginLeft: 'auto',
-              fontSize: '11px',
-              fontFamily: 'var(--font-ui)',
-              color: browseMode ? 'var(--accent-active)' : 'var(--muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              color: browseMode ? 'var(--accent)' : 'var(--muted)',
+              background: browseMode ? 'rgba(91,255,216,0.08)' : 'transparent',
+              border: `1px solid ${browseMode ? 'rgba(91,255,216,0.2)' : 'transparent'}`,
+              borderRadius: '4px',
+              padding: browseMode ? '2px 7px' : '0',
             }}>
-              {browseMode ? 'Browse' : 'Player'}
+              {browseMode ? 'BROWSE' : 'PLAYER'}
             </span>
           )}
         </div>
 
-        {/* Camera start error */}
+        {/* Camera error */}
         {startError && (
           <div style={{
-            background: 'rgba(239,68,68,0.08)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            borderRadius: '8px',
-            padding: '10px 12px',
-            marginBottom: '10px',
+            background: 'rgba(255,85,85,0.06)', border: '1px solid rgba(255,85,85,0.2)',
+            borderRadius: 'var(--radius-sm)', padding: '10px 12px', marginBottom: '10px',
             display: 'flex', gap: '8px', alignItems: 'flex-start',
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="#ef4444" strokeWidth="2" strokeLinecap="round"
+              stroke="var(--red)" strokeWidth="2" strokeLinecap="round"
               style={{ flexShrink: 0, marginTop: '1px' }}>
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5" />
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
             </svg>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#ef4444', marginBottom: '3px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--red)', marginBottom: '3px' }}>
                 Camera error
               </div>
-              <div style={{ fontSize: '11px', color: '#a05555', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: '11px', color: '#a05555', lineHeight: 1.5 }}>
                 {startError}
               </div>
             </div>
           </div>
         )}
 
+        {/* Buttons */}
         <div style={{ display: 'flex', gap: '6px' }}>
           <button
             style={{
               ...S.btn,
-              ...(running ? S.btnSecondary : S.btnPrimary),
-              opacity: (isStarting || (running && !modelReady)) ? 0.6 : 1,
+              ...(running ? S.btnStop : S.btnPrimary),
+              opacity: (isStarting || (running && !modelReady)) ? 0.55 : 1,
             }}
             onClick={handleToggle}
             disabled={isStarting}
           >
-            {running
-              ? (modelReady ? 'Stop' : 'Loading…')
-              : isStarting ? 'Starting…' : 'Start'}
+            {running ? (modelReady ? 'Stop' : 'Loading…') : isStarting ? 'Starting…' : 'Start'}
           </button>
 
           {running && (
             <button
               style={{
                 ...S.btn,
-                width: 'auto',
-                flex: '0 0 auto',
-                padding: '10px 14px',
-                background: browseMode ? 'rgba(91,255,216,0.08)' : 'transparent',
-                color: browseMode ? 'var(--accent-active)' : 'var(--muted)',
-                border: `1px solid ${browseMode ? 'rgba(91,255,216,0.25)' : 'var(--border)'}`,
-                opacity: modeChanging ? 0.5 : 1,
-                fontSize: '11px',
+                width: 'auto', flex: '0 0 auto', padding: '10px 14px',
+                background: browseMode ? 'rgba(91,255,216,0.08)' : 'var(--surface-2)',
+                color: browseMode ? 'var(--accent)' : 'var(--text-2)',
+                border: `1px solid ${browseMode ? 'rgba(91,255,216,0.2)' : 'var(--border)'}`,
+                opacity: modeChanging ? 0.45 : 1,
+                fontSize: '12px',
               }}
               onClick={onModeToggle}
               disabled={modeChanging}
@@ -1341,9 +996,7 @@ function MainScreen({
         </div>
       </div>
 
-      {/* ── First-launch calibration hint — shown before engine starts ── */}
-      {/* blinkCalibNeeded suppresses this because the blink alert above already */}
-      {/* prompts calibration — showing both simultaneously is redundant.        */}
+      {/* ── First-launch hint ── */}
       {!running && !isStarting && !startError &&
         isFirstLaunch && !hasAnyEarCalibration && !firstLaunchHintDismissed && !blinkCalibNeeded && (
         <FirstLaunchHint
@@ -1352,60 +1005,67 @@ function MainScreen({
         />
       )}
 
-      {/* Idle hint — shown when engine is off, not starting, no prior command this session */}
+      {/* ── Idle: default gestures ── */}
       {!running && !isStarting && !lastCommand && !startError && (
         <div style={S.card}>
-          <div style={S.subheading}>Default gestures</div>
+          <div style={S.sectionLabel}>Default gestures</div>
           {[
-            ['Head left / right', 'Rewind / Skip'],
-            ['Head up / down',    'Volume'],
+            ['Head left / right', '← Rewind / Skip →'],
+            ['Head up / down',    '↑↓ Volume'],
             ['Tilt left / right', 'Prev / Next'],
             ['Eyes closed',       'Play / Pause'],
-          ].map(([gesture, cmd]) => (
+          ].map(([gesture, cmd], i, arr) => (
             <div key={gesture} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '8px 0',
-              borderBottom: '1px solid var(--border)',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
             }}>
-              <span style={{ fontSize: '12px', color: 'var(--text)' }}>{gesture}</span>
-              <span style={{ fontSize: '12px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-2)' }}>{gesture}</span>
+              <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</span>
             </div>
           ))}
         </div>
       )}
 
+      {/* ── Last command flash ── */}
       {lastCommand && (
-        <div style={S.card}>
-          <div style={S.subheading}>Last gesture</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--accent)' }}>
+        <div key={`${lastCommand.command}-${lastCommand.gesture}`} className="cmd-flash" style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border-mid)',
+          borderRadius: 'var(--radius-md)',
+          padding: '14px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '4px', letterSpacing: '0.04em' }}>
+              LAST GESTURE
+            </div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--accent)' }}>
               {cmdLabels[lastCommand.command] ?? COMMAND_LABELS[lastCommand.command] ?? lastCommand.command}
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
-              {GESTURE_LABELS[lastCommand.gesture] ?? lastCommand.gesture}
-            </span>
+            </div>
           </div>
+          <span style={{
+            fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-mono)',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: '4px', padding: '3px 7px', letterSpacing: '0.03em',
+          }}>
+            {GESTURE_LABELS[lastCommand.gesture] ?? lastCommand.gesture}
+          </span>
         </div>
       )}
 
+      {/* ── Live metrics ── */}
       {metrics && (
         <div style={S.card}>
-          <div style={S.subheading}>Live metrics</div>
-
-          {/* Head rotation — centered bars, grow from midpoint outward */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', marginBottom: '6px' }}>
+          <div style={S.sectionLabel}>Live metrics</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '8px' }}>
             <MetricBar label="Yaw"   value={metrics.yaw}   max={60} threshold={thresholds.yaw}   type="centered" unit="°" />
             <MetricBar label="Pitch" value={metrics.pitch} max={45} threshold={thresholds.pitch} type="centered" unit="°" />
             <MetricBar label="Roll"  value={metrics.roll}  max={45} threshold={thresholds.roll}  type="centered" unit="°" />
           </div>
-
-          {/* 1px divider between rotation and face metrics */}
-          <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0 6px' }} />
-
-          {/* Face metrics — fill bars, left to right */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
-            {/* EAR: use personal calibrated threshold when available, else settings default */}
-            <MetricBar label="EAR"   value={metrics.ear}   max={0.40} threshold={calibratedEar ?? thresholds.earClose}  type="fill" triggerBelow />
+          <div style={S.divider} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            <MetricBar label="EAR"   value={metrics.ear}   max={0.40} threshold={calibratedEar ?? thresholds.earClose} type="fill" triggerBelow />
             <MetricBar label="Mouth" value={metrics.mouth} max={1.0}  threshold={thresholds.mouthOpen} type="fill" />
           </div>
         </div>
@@ -1428,59 +1088,38 @@ function MainScreen({
  */
 function FirstLaunchHint({ onCalibrate, onSkip }) {
   return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: '12px',
-      padding: '16px',
+    <div className="fade-in" style={{
+      background: 'rgba(91,255,216,0.04)',
+      border: '1px solid rgba(91,255,216,0.15)',
+      borderRadius: 'var(--radius-md)', padding: '14px 16px',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
           <circle cx="12" cy="12" r="3"/>
         </svg>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
           Set up blink detection first
         </span>
       </div>
-
-      {/* Body */}
-      <p style={{
-        fontSize: '12px', fontFamily: 'var(--font-ui)',
-        color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 12px',
-      }}>
-        A 30-second calibration makes eye-close detection reliable for your specific eyes.
+      <p style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 12px' }}>
+        30-second calibration makes eye-close detection reliable for your eyes.
       </p>
-
-      {/* CTA */}
-      <button
-        onClick={onCalibrate}
-        style={{
-          width: '100%', fontFamily: 'var(--font-ui)',
-          fontSize: '12px', fontWeight: 600,
-          background: 'var(--text)', color: '#0e0e0e',
-          border: 'none', borderRadius: '8px',
-          padding: '10px 0', cursor: 'pointer',
-          marginBottom: '8px',
-        }}
-      >
+      <button onClick={onCalibrate} style={{
+        width: '100%', fontFamily: 'var(--font-ui)', fontSize: '12px', fontWeight: 600,
+        background: 'var(--accent)', color: '#060f0c',
+        border: 'none', borderRadius: 'var(--radius-sm)',
+        padding: '9px 0', cursor: 'pointer', marginBottom: '8px',
+      }}>
         Calibrate now — 30 sec
       </button>
-
-      {/* Skip */}
-      <button
-        onClick={onSkip}
-        style={{
-          display: 'block', width: '100%',
-          background: 'none', border: 'none', cursor: 'pointer',
-          fontFamily: 'var(--font-mono)', fontSize: '10px',
-          color: 'var(--muted)', letterSpacing: '0.03em',
-          padding: '2px 0',
-        }}
-      >
-        Start without calibrating
+      <button onClick={onSkip} style={{
+        display: 'block', width: '100%', background: 'none', border: 'none',
+        cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '10px',
+        color: 'var(--muted)', letterSpacing: '0.03em', padding: '2px 0',
+      }}>
+        Skip for now
       </button>
     </div>
   )
@@ -1559,70 +1198,65 @@ function CalibrationScreen({ running, sendToContent }) {
           mode={wizardMode}
           sendToContent={sendToContent}
           shouldIgnoreSidePanelMessage={shouldIgnoreSidePanelMessage}
-          onClose={() => {
-            setWizardMode(null)
-            refreshSummary()
-          }}
+          onClose={() => { setWizardMode(null); refreshSummary() }}
         />
       )}
 
+      {/* ── Calibration data ── */}
       <div style={S.card}>
-        <div style={S.subheading}>Calibration data</div>
+        <div style={S.sectionLabel}>Calibration data</div>
 
-        {/* Data tiles */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', marginBottom: '12px' }}>
-          {[
-            ['Yaw', yawStr],
-            ['Pitch', pitchStr],
-            ['EAR', thStr],
-          ].map(([label, val]) => (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '10px' }}>
+          {[['YAW', yawStr], ['PITCH', pitchStr], ['EAR', thStr]].map(([label, val]) => (
             <div key={label} style={S.metricTile}>
               <span style={S.metricLabel}>{label}</span>
               <span style={S.metricValue}>{val}</span>
             </div>
           ))}
         </div>
-        <p style={{ color: 'var(--muted)', fontSize: '10px', marginBottom: '12px', letterSpacing: '0.01em' }}>
-          Last calibrated: {dateStr}
-        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+            stroke="var(--muted)" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+          </svg>
+          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', letterSpacing: '0.02em' }}>
+            {dateStr}
+          </span>
+        </div>
 
         {!running && (
-          <p style={{
-            fontSize: '11px',
-            color: 'var(--muted)',
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            padding: '8px 10px',
-            marginBottom: '12px',
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: '8px',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', padding: '9px 11px', marginBottom: '12px',
           }}>
-            Start the camera from Home first — calibration needs a live face feed.
-          </p>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
+              style={{ flexShrink: 0, marginTop: '1px' }}>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
+            </svg>
+            <span style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
+              Start the camera from Home — calibration needs a live face feed.
+            </span>
+          </div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <button
-            type="button"
-            style={{ ...S.btn, ...S.btnPrimary, opacity: running ? 1 : 0.4 }}
-            disabled={!running}
-            onClick={() => setWizardMode('neutral_only')}
-          >
+          <button type="button"
+            style={{ ...S.btn, ...S.btnPrimary, opacity: running ? 1 : 0.35 }}
+            disabled={!running} onClick={() => setWizardMode('neutral_only')}>
             Neutral pose
           </button>
-          <button
-            type="button"
-            style={{ ...S.btn, ...S.btnSecondary, opacity: running ? 1 : 0.4 }}
-            disabled={!running}
-            onClick={() => setWizardMode('blink_only')}
-          >
+          <button type="button"
+            style={{ ...S.btn, ...S.btnStop, opacity: running ? 1 : 0.35 }}
+            disabled={!running} onClick={() => setWizardMode('blink_only')}>
             Blink detection
           </button>
-          <button
-            type="button"
-            style={{ ...S.btn, ...S.btnSecondary, opacity: running ? 1 : 0.4 }}
-            disabled={!running}
-            onClick={() => setWizardMode('full')}
-          >
+          <button type="button"
+            style={{ ...S.btn, ...S.btnSecondary, opacity: running ? 1 : 0.35 }}
+            disabled={!running} onClick={() => setWizardMode('full')}>
             Full recalibration
           </button>
         </div>
@@ -1732,33 +1366,50 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
   const commandOptions = isBrowse ? BROWSE_COMMANDS : Object.values(COMMANDS)
   const labels = isBrowse ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
 
+  // Reusable toggle component
+  const Toggle = ({ checked, onChange }) => (
+    <div style={{ position: 'relative', flexShrink: 0, marginTop: '1px' }}>
+      <input type="checkbox" checked={checked} onChange={onChange}
+        style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+      <div style={{
+        width: '34px', height: '19px', borderRadius: '10px',
+        background: checked ? 'var(--accent)' : 'var(--surface-3)',
+        border: `1px solid ${checked ? 'rgba(91,255,216,0.3)' : 'var(--border-mid)'}`,
+        transition: 'background 0.2s, border-color 0.2s',
+        position: 'relative', cursor: 'pointer',
+      }}>
+        <div style={{
+          position: 'absolute', top: '2px',
+          left: checked ? '16px' : '2px',
+          width: '13px', height: '13px', borderRadius: '50%',
+          background: checked ? '#060f0c' : 'var(--muted)',
+          transition: 'left 0.2s, background 0.2s',
+        }} />
+      </div>
+    </div>
+  )
+
   return (
     <>
+      {/* ── Gesture mapping ── */}
       <div style={S.card}>
-        <div style={S.subheading}>Gesture mapping</div>
-        <div style={{ ...S.nav, marginBottom: '10px' }}>
-          <button
-            style={{ ...S.navBtn, ...(editingMode === 'player' ? S.navBtnActive : {}) }}
-            onClick={() => setEditingMode('player')}
-          >
-            ▶ Player
+        <div style={S.sectionLabel}>Gesture mapping</div>
+        <div style={{ ...S.nav, marginBottom: '12px' }}>
+          <button style={{ ...S.navBtn, ...(editingMode === 'player' ? S.navBtnActive : {}) }}
+            onClick={() => setEditingMode('player')}>
+            Player
           </button>
-          <button
-            style={{ ...S.navBtn, ...(editingMode === 'browse' ? S.navBtnActive : {}) }}
-            onClick={() => setEditingMode('browse')}
-          >
-            ⊞ Browse
+          <button style={{ ...S.navBtn, ...(editingMode === 'browse' ? S.navBtnActive : {}) }}
+            onClick={() => setEditingMode('browse')}>
+            Browse
           </button>
         </div>
         {mappableGestures.map((g) => (
           <div key={g} style={S.gestureRow}>
             <span style={S.gestureLabel}>{GESTURE_LABELS[g] ?? g}</span>
             <div style={S.gestureSelect}>
-              <select
-                style={S.select}
-                value={currentMap[g] ?? COMMANDS.NONE}
-                onChange={(e) => handleGestureChange(g, e.target.value)}
-              >
+              <select style={S.select} value={currentMap[g] ?? COMMANDS.NONE}
+                onChange={(e) => handleGestureChange(g, e.target.value)}>
                 {commandOptions.map((c) => (
                   <option key={c} value={c}>{labels[c] ?? COMMAND_LABELS[c] ?? c}</option>
                 ))}
@@ -1768,13 +1419,10 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
         ))}
       </div>
 
+      {/* ── Sensitivity ── */}
       <div style={S.card}>
-        <div style={S.subheading}>Sensitivity</div>
-        <select
-          style={S.select}
-          value={preset}
-          onChange={handlePresetChange}
-        >
+        <div style={S.sectionLabel}>Sensitivity</div>
+        <select style={S.select} value={preset} onChange={handlePresetChange}>
           <option value="low">Low — large movements</option>
           <option value="medium">Medium (default)</option>
           <option value="high">High — small movements</option>
@@ -1783,115 +1431,68 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
 
       {/* ── Smart features ── */}
       <div style={S.card}>
-        <div style={S.subheading}>Smart features</div>
-
-        {/* Auto-pause on no face */}
-        <label style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '12px',
-          cursor: 'pointer',
-        }}>
-          {/* Custom toggle pill */}
-          <div style={{ position: 'relative', flexShrink: 0, marginTop: '2px' }}>
-            <input
-              type="checkbox"
-              checked={autoPause}
-              onChange={onAutoPauseToggle}
-              style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
-            />
-            <div style={{
-              width: '36px',
-              height: '20px',
-              borderRadius: '10px',
-              background: autoPause ? 'var(--accent)' : 'var(--border)',
-              transition: 'background 0.2s',
-              position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: '3px',
-                left: autoPause ? '19px' : '3px',
-                width: '14px',
-                height: '14px',
-                borderRadius: '50%',
-                background: autoPause ? '#0a0a0a' : 'var(--muted)',
-                transition: 'left 0.2s, background 0.2s',
-              }} />
-            </div>
-          </div>
-
+        <div style={S.sectionLabel}>Smart features</div>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+          <Toggle checked={autoPause} onChange={onAutoPauseToggle} />
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>
               Auto-pause when you leave
             </div>
-            <div style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5 }}>
-              Pauses after 2 s with no face in frame. Resumes when you return.
+            <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
+              Pauses after 2s with no face in frame.
             </div>
           </div>
         </label>
-
-        <div style={{ height: '1px', background: 'var(--border)', margin: '12px 0' }} />
-
-        {/* Refined landmarks toggle */}
+        <div style={S.divider} />
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
-          <div style={{ position: 'relative', flexShrink: 0, marginTop: '2px' }}>
-            <input
-              type="checkbox"
-              checked={refineLandmarks}
-              onChange={handleRefineLandmarksToggle}
-              style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
-            />
-            <div style={{
-              width: '36px', height: '20px', borderRadius: '10px',
-              background: refineLandmarks ? 'var(--accent)' : 'var(--border)',
-              transition: 'background 0.2s', position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', top: '3px',
-                left: refineLandmarks ? '19px' : '3px',
-                width: '14px', height: '14px', borderRadius: '50%',
-                background: refineLandmarks ? '#0a0a0a' : 'var(--muted)',
-                transition: 'left 0.2s, background 0.2s',
-              }} />
-            </div>
-          </div>
+          <Toggle checked={refineLandmarks} onChange={handleRefineLandmarksToggle} />
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>
               High-precision landmarks
             </div>
-            <div style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5 }}>
-              478-point mesh for more accurate eye tracking. Applies after reloading the YouTube tab.
+            <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
+              478-point mesh. Applies after reloading YouTube tab.
             </div>
           </div>
         </label>
       </div>
 
-      {/* ── Data management ── */}
+      {/* ── Data ── */}
       <div style={S.card}>
-        <div style={S.subheading}>Data</div>
-        <p style={{ fontSize: '12px', fontFamily: 'var(--font-ui)', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '12px' }}>
-          All data is stored locally. Nothing is sent to any server.
-        </p>
+        <div style={S.sectionLabel}>Data</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+            stroke="var(--muted)" strokeWidth="2" strokeLinecap="round">
+            <rect x="5" y="2" width="14" height="20" rx="2"/>
+            <path d="M12 18h.01"/>
+          </svg>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+            All data stored locally — nothing sent to any server.
+          </span>
+        </div>
         <button
           style={{
             ...S.btn,
-            background: clearConfirm ? '#ef4444' : 'var(--surface-2)',
-            color: clearConfirm ? '#fff' : '#ef4444',
-            border: '1px solid #ef4444',
-            transition: 'background 0.2s, color 0.2s',
+            background: clearConfirm ? 'rgba(255,85,85,0.12)' : 'transparent',
+            color: 'var(--red)',
+            border: '1px solid rgba(255,85,85,0.25)',
+            transition: 'background 0.2s',
+            fontSize: '12px',
           }}
           onClick={handleClearData}
         >
-          {clearConfirm ? 'Tap again to confirm — this cannot be undone' : 'Clear all Nodex data'}
+          {clearConfirm ? '⚠ Tap again to confirm — cannot be undone' : 'Clear all Nodex data'}
         </button>
       </div>
 
+      {/* ── Save ── */}
       <button
         style={{
           ...S.btn,
-          ...(saved ? S.btnSecondary : S.btnPrimary),
-          opacity: saved ? 0.75 : 1,
+          background: saved ? 'transparent' : 'var(--accent)',
+          color: saved ? 'var(--accent)' : '#060f0c',
+          border: saved ? '1px solid rgba(91,255,216,0.25)' : 'none',
+          transition: 'all 0.2s',
         }}
         onClick={handleSave}
       >

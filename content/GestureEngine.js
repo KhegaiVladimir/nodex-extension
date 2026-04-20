@@ -353,7 +353,15 @@ export class GestureEngine {
 
     if (this._active !== GESTURES.NONE && this._active !== GESTURES.EYES_CLOSED) {
       const deactivate = this._shouldDeactivate(this._active, yaw, pitch, roll, mouth, T)
-      if (deactivate) this._active = GESTURES.NONE
+      if (deactivate) {
+        this._active = GESTURES.NONE
+        // Reset dwell counters so the gesture cannot immediately re-fire on the next
+        // frame without the user fully re-committing the head movement. Without this,
+        // a soft-decaying _dwellPitchDown can leave enough residual credit that
+        // HEAD_DOWN re-detects instantly after deactivation — causing the "infinite
+        // repeat" symptom after a single nod.
+        this._resetHeadPoseDwell()
+      }
     }
 
     if (this._active === GESTURES.NONE) {

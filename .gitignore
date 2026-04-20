@@ -6,3 +6,7 @@ dist/
 .cursorrules
 store-assets/*
 !store-assets/.gitkeep
+
+# Obsidian: симлинк obsidian_notes и локальное хранилище не коммитим
+obsidian_notes/
+.obsidian-vault/

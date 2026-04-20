@@ -23,6 +23,7 @@ import { HUD } from './HUD.js'
 import { GestureEngine } from './GestureEngine.js'
 import { YouTubeController } from './YouTubeController.js'
 import { BrowseController } from './BrowseController.js'
+import { OnboardingOverlay } from './OnboardingOverlay.js'
 
 // Guard: bundle loads once per tab (double injection would duplicate module scope).
 // SPA navigation recreates page-scoped UI via yt-navigate-finish + createPageScoped(); persistent camera/GestureEngine stay loaded.
@@ -150,6 +151,8 @@ class NodexPageScoped {
     // before the NONE guard so the step always advances on a valid blink.
     if (P._tutorialMode && gesture === GESTURES.EYES_CLOSED) {
       P._sendToSidePanel({ type: MSG.BLINK_DETECTED, tutorial: true })
+      // Also notify the onboarding overlay directly (same JS context, no round-trip)
+      P._overlayCommandListener?.({ gesture: GESTURES.EYES_CLOSED })
     }
 
     if (cmd === COMMANDS.NONE) return
@@ -164,6 +167,8 @@ class NodexPageScoped {
         browseMode: this._browseMode,
         tutorial: true,
       })
+      // Notify overlay for non-blink gestures
+      P._overlayCommandListener?.({ gesture })
       return
     }
 
@@ -401,6 +406,8 @@ class NodexPersistent {
       },
       onMetrics:  (metrics) => {
         this._page?.handleMetrics(metrics)
+        // Forward to overlay when it's active (same JS context — no message hop needed)
+        this._overlayMetricsListener?.(metrics)
       },
       onPanelNotify: (payload) => {
         this._sendToSidePanel(payload)
@@ -1218,5 +1225,19 @@ function onYtNavigateFinish() {
 document.addEventListener('yt-navigate-finish', onYtNavigateFinish)
 
 const _nodexPersistentFacade = createPersistent()
-void _nodexPersistentFacade._initPromise.then(() => createPageScoped())
+void _nodexPersistentFacade._initPromise.then(async () => {
+  await createPageScoped()
+
+  // Show the onboarding overlay on first run.
+  // Checked after page is created so GestureEngine + page are fully wired.
+  try {
+    const { onboarding_complete } = await chrome.storage.local.get('onboarding_complete')
+    if (!onboarding_complete && nodexPersistentSingleton && !nodexPersistentSingleton._destroyed) {
+      const overlay = new OnboardingOverlay(nodexPersistentSingleton)
+      overlay.mount()
+    }
+  } catch (e) {
+    console.error('[Nodex] onboarding overlay check failed:', e)
+  }
+})
 } // end of __nodexLoaded guard

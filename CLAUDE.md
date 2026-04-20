@@ -39,3 +39,61 @@
 - Output ONLY the modified code blocks.
 - Provide clear comments explaining the *why*, not the *what*, especially for MV3 hacks or math formulas.
 - Never remove `console.error` logs.
+
+---
+
+## 8. Docs Routing Index
+
+Read the relevant doc before making changes. Don't guess at constants or selectors — the source of truth is in these files.
+
+### If you're debugging
+
+| Symptom | Read first |
+|---|---|
+| Browse Mode broken / no cards | `docs/debugging/youtube-selectors-dead.md` |
+| CSP / Trusted Types errors | `docs/debugging/csp-errors.md` |
+| FPS dropped / feels laggy | `docs/debugging/performance-issues.md` |
+| Blink fires when it shouldn't | `docs/debugging/blink-misfires.md` |
+| Settings not persisting | `docs/debugging/storage-race-conditions.md` |
+| Anything else | `docs/gotchas.md` then `docs/decisions.md` |
+
+### If you're adding or changing a feature
+
+| Area | Read first |
+|---|---|
+| Player mode (video controls) | `docs/player-mode.md` + `docs/youtube-integration.md` |
+| Browse mode (feed navigation) | `docs/browse-mode.md` + `docs/selectors.md` |
+| New gesture | `docs/gesture-system.md` + `docs/face-tracking.md` |
+| Blink / EAR / calibration | `docs/blink-detection.md` |
+| On-page overlay UI | `docs/ui-overlay.md` |
+| Side panel UI | `sidepanel/App.jsx` directly |
+| New storage key | `docs/storage.md` |
+| Build pipeline | `docs/build-and-bundling.md` |
+| Permissions | `docs/manifest-and-permissions.md` |
+
+### If you're understanding the architecture
+
+| Question | Read first |
+|---|---|
+| How does everything connect? | `docs/architecture.md` |
+| Why MAIN vs ISOLATED world? | `docs/content-scripts.md` |
+| How does the service worker work? | `docs/service-worker.md` |
+| How does MediaPipe load? | `docs/mediapipe-integration.md` |
+| How does YouTube SPA nav work? | `docs/youtube-integration.md` |
+
+### After any change
+
+- Bug fix that wasn't obvious → add entry to `docs/gotchas.md`
+- Architecture/API decision → add entry to `docs/decisions.md`
+- YouTube selector changed → update `docs/selectors.md` with date
+- Any change → add entry to `docs/changelog-internal.md`
+
+### Stack reference
+
+| Topic | Read |
+|---|---|
+| MV3 SW lifecycle gotchas | `docs/reference/mv3-service-worker-lifecycle.md` |
+| chrome.scripting API | `docs/reference/chrome-scripting-api.md` |
+| Trusted Types spec | `docs/reference/trusted-types-spec.md` |
+| MediaPipe landmark indices | `docs/reference/mediapipe-facemesh-landmarks.md` |
+| YouTube player shortcuts | `docs/reference/youtube-player-api.md` |

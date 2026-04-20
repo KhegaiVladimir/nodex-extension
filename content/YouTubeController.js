@@ -1,6 +1,38 @@
 import { COMMANDS } from '../shared/constants/commands.js'
 
 /**
+ * `document.querySelector` does not pierce open ShadowRoots. YouTube nests the
+ * html5 chrome (`.ytp-prev-button`, etc.) under custom elements, so a flat query
+ * often returns null even when the control is visible — PREV appeared "broken".
+ * @param {ParentNode | null} root
+ * @param {string} selector
+ * @returns {Element | null}
+ */
+function querySelectorDeep(root, selector) {
+  if (!root) return null
+  try {
+    if (root.nodeType === 1 && root.matches(selector)) return /** @type {Element} */ (root)
+  } catch (_e) {
+    return null
+  }
+  try {
+    const hit = root.querySelector?.(selector)
+    if (hit) return hit
+  } catch (_e) {
+    return null
+  }
+  if (root.shadowRoot) {
+    const inShadow = querySelectorDeep(root.shadowRoot, selector)
+    if (inShadow) return inShadow
+  }
+  for (const child of root.children || []) {
+    const nested = querySelectorDeep(child, selector)
+    if (nested) return nested
+  }
+  return null
+}
+
+/**
  * YouTube keyboard shortcut map.
  * BACK is intercepted in NodexPageScoped.handleCommand() and never reaches here.
  * PREV and PLAY/PAUSE are handled inline in execute() before reaching KEY_MAP.
@@ -49,16 +81,34 @@ export class YouTubeController {
     // This prevents accidental seek/skip while still letting the user control audio.
     if (isAdPlaying() && !AD_SAFE_COMMANDS.has(command)) return false
 
-    // PREV clicks the player's previous-video button — only present in playlists.
-    // Do NOT fall through to _sendKey: there is no reliable keyboard shortcut for this
-    // in YouTube, and the old code called _safeGoBack() which navigated away from the page.
+    // Previous playlist / queue video: prefer the real control (works when visible),
+    // then Shift+P (YouTube Help — same idea as Shift+N for NEXT). Flat
+    // `querySelector('.ytp-prev-button')` misses controls inside Shadow DOM.
     if (command === COMMANDS.PREV) {
-      const prevBtn = document.querySelector('.ytp-prev-button')
-      if (prevBtn) {
-        prevBtn.click()
-        return true
+      const host = document.querySelector('#movie_player') ?? document.body
+
+      // Try the real in-player prev button (playlist context).
+      const prevBtn = querySelectorDeep(host, '.ytp-prev-button')
+      const canClick =
+        prevBtn &&
+        !prevBtn.disabled &&
+        prevBtn.getAttribute('aria-disabled') !== 'true'
+      if (canClick) {
+        try {
+          prevBtn.click()
+          return true
+        } catch (e) {
+          console.error('[Nodex] Prev button click failed:', e)
+        }
       }
-      return false // Not in a playlist — do nothing rather than navigate away
+
+      // Shift+P: YouTube playlist shortcut (no-op outside playlists).
+      this._sendKey({ key: 'P', code: 'KeyP', keyCode: 80, shiftKey: true })
+
+      // Final fallback: browser history.back() so TILT_LEFT always "goes back"
+      // even when there is no playlist prev button (the common single-video case).
+      window.history.back()
+      return true
     }
 
     // PLAY and PAUSE use the video element directly so they are not toggles —

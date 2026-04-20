@@ -29,7 +29,7 @@ export const DEFAULT_GESTURE_MAP = PLAYER_GESTURE_MAP
 
 export const DEFAULT_COOLDOWNS = {
   [GESTURES.HEAD_UP]:     200,   // volume repeat — fast
-  [GESTURES.HEAD_DOWN]:   200,   // volume repeat — fast
+  [GESTURES.HEAD_DOWN]:   350,   // was 200 — slowed to prevent rapid-fire on a single nod
   [GESTURES.HEAD_LEFT]:   350,   // seek — slightly faster (was 400)
   [GESTURES.HEAD_RIGHT]:  350,   // seek — slightly faster (was 400)
   [GESTURES.TILT_LEFT]:   800,
