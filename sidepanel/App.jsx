@@ -20,6 +20,60 @@ import {
 import CalibrationWizard from './CalibrationWizard.jsx'
 
 /* ──────────────────────────────────────────────────────
+   ICON SYSTEM  (thin-stroke, 24×24 viewBox)
+────────────────────────────────────────────────────── */
+
+const Icon = ({ size = 16, sw = 1.5, children, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"
+    style={{ display: 'block', ...style }}>
+    {children}
+  </svg>
+)
+
+const IconPlay       = (p) => <Icon {...p}><path d="M7 5l12 7-12 7V5z" fill="currentColor" stroke="none"/></Icon>
+const IconPause      = (p) => <Icon {...p}><rect x="7" y="5" width="3" height="14" rx="0.5" fill="currentColor" stroke="none"/><rect x="14" y="5" width="3" height="14" rx="0.5" fill="currentColor" stroke="none"/></Icon>
+const IconVolUp      = (p) => <Icon {...p}><path d="M4 10v4h3l4 4V6l-4 4H4z"/><path d="M16 8a5 5 0 010 8M19 5a8 8 0 010 14"/></Icon>
+const IconSkip       = (p) => <Icon {...p}><path d="M13 5l7 7-7 7V5zM4 5l7 7-7 7V5z" fill="currentColor" stroke="none"/></Icon>
+const IconRewind     = (p) => <Icon {...p}><path d="M11 19L4 12l7-7v14zM20 19l-7-7 7-7v14z" fill="currentColor" stroke="none"/></Icon>
+const IconBack       = (p) => <Icon {...p}><path d="M11 17l-5-5 5-5M6 12h13"/></Icon>
+const IconBrowse     = (p) => <Icon {...p}><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/></Icon>
+const IconPlayer     = (p) => <Icon {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3V9z" fill="currentColor" stroke="none"/></Icon>
+const IconWarning    = (p) => <Icon {...p}><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></Icon>
+const IconCheck      = (p) => <Icon {...p}><path d="M4 12l5 5L20 6"/></Icon>
+const IconArrowLeft  = (p) => <Icon {...p}><path d="M14 6l-6 6 6 6"/></Icon>
+const IconArrowRight = (p) => <Icon {...p}><path d="M10 6l6 6-6 6"/></Icon>
+const IconCamera     = (p) => <Icon {...p}><path d="M4 7h4l2-2h4l2 2h4v12H4V7z"/><circle cx="12" cy="13" r="3.5"/></Icon>
+const IconSun        = (p) => <Icon {...p}><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></Icon>
+const IconMoon       = (p) => <Icon {...p}><path d="M20 14a8 8 0 11-10-10 6 6 0 0010 10z"/></Icon>
+const IconMonitor    = (p) => <Icon {...p}><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></Icon>
+const IconFace       = (p) => <Icon {...p}><circle cx="12" cy="12" r="8"/><circle cx="9.5" cy="10.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="14.5" cy="10.5" r="0.6" fill="currentColor" stroke="none"/><path d="M9 15c.8.9 1.8 1.4 3 1.4s2.2-.5 3-1.4"/></Icon>
+const IconNodLR      = (p) => <Icon {...p}><circle cx="12" cy="9" r="3.5"/><path d="M5 14l-2 2 2 2M19 14l2 2-2 2M3 16h18"/></Icon>
+const IconNodUD      = (p) => <Icon {...p}><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M10 5l2-2 2 2M10 19l2 2 2-2"/></Icon>
+const IconTilt       = (p) => <Icon {...p}><circle cx="12" cy="12" r="3.5"/><path d="M5 17c2-3 4-4.5 7-4.5s5 1.5 7 4.5"/></Icon>
+const IconBlink      = (p) => <Icon {...p}><path d="M2 12c2-3.5 6-5.5 10-5.5s8 2 10 5.5"/><path d="M2 12c2 3.5 6 5.5 10 5.5s8-2 10-5.5"/></Icon>
+const IconShield     = (p) => <Icon {...p}><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></Icon>
+const IconClose      = (p) => <Icon {...p}><path d="M6 6l12 12M18 6L6 18"/></Icon>
+const IconClock      = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></Icon>
+const IconChevronDown = (p) => <Icon {...p}><path d="M6 9l6 6 6-6"/></Icon>
+const IconChevronRight = (p) => <Icon {...p}><path d="M9 6l6 6-6 6"/></Icon>
+const IconSettings   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></Icon>
+const IconVolDown    = (p) => <Icon {...p}><path d="M4 10v4h3l4 4V6l-4 4H4z"/><path d="M16 10l4 4M20 10l-4 4"/></Icon>
+const IconEye        = (p) => <Icon {...p}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></Icon>
+const IconInfo       = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/></Icon>
+
+/* Nodex logo mark — accent-tinted face node icon */
+const NodexLogo = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ display: 'block', flexShrink: 0 }}>
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--accent)" opacity="0.08"/>
+    <rect x="1" y="1" width="22" height="22" rx="6" stroke="var(--accent)" strokeWidth="1" opacity="0.35"/>
+    <path d="M8 8c0-1.5 1.2-2.5 3-2.5 4 0 5 3 5 5.5v3c0 .5-.3.8-.8.8H14.5c0 1.8-1 3-2.5 3H9.5"
+      stroke="var(--accent)" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="13" cy="11" r="0.9" fill="var(--accent)"/>
+  </svg>
+)
+
+/* ──────────────────────────────────────────────────────
    THEME / ACCENT HELPERS
    (OKLCH → sRGB conversion, system theme hook)
 ────────────────────────────────────────────────────── */
@@ -126,6 +180,26 @@ const GESTURE_LABELS = {
   [GESTURES.EYES_CLOSED]: 'Eyes Closed',
   [GESTURES.EYES_HOLD]:   'Eyes Hold',
   [GESTURES.MOUTH_OPEN]:  'Mouth Open',
+}
+
+/* Small 16×16 SVG icons for each gesture, thin stroke to match design system */
+const G_ICON = (paths) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    {paths}
+  </svg>
+)
+
+const GESTURE_ICONS = {
+  [GESTURES.HEAD_LEFT]:   G_ICON(<><path d="M15 18 9 12l6-6"/><path d="M21 12H9"/></>),
+  [GESTURES.HEAD_RIGHT]:  G_ICON(<><path d="M9 18l6-6-6-6"/><path d="M3 12h12"/></>),
+  [GESTURES.HEAD_UP]:     G_ICON(<><path d="M18 15l-6-6-6 6"/><path d="M12 21V9"/></>),
+  [GESTURES.HEAD_DOWN]:   G_ICON(<><path d="M6 9l6 6 6-6"/><path d="M12 3v12"/></>),
+  [GESTURES.TILT_LEFT]:   G_ICON(<><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 7v5h5"/></>),
+  [GESTURES.TILT_RIGHT]:  G_ICON(<><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 7v5h-5"/></>),
+  [GESTURES.EYES_CLOSED]: G_ICON(<><path d="M2 12s3.6-7 10-7 10 7 10 7"/><path d="M2 16s3.6-4 10-4 10 4 10 4"/><line x1="4" y1="21" x2="6" y2="17"/><line x1="12" y1="22" x2="12" y2="18"/><line x1="20" y1="21" x2="18" y2="17"/></>),
+  [GESTURES.EYES_HOLD]:   G_ICON(<><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/><line x1="12" y1="5" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="19"/></>),
+  [GESTURES.MOUTH_OPEN]:  G_ICON(<><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="12" cy="12" r="9"/><line x1="9" y1="10" x2="9.01" y2="10" strokeWidth="2.5"/><line x1="15" y1="10" x2="15.01" y2="10" strokeWidth="2.5"/></>),
 }
 
 const COMMAND_LABELS = {
@@ -407,30 +481,74 @@ const SettingsRow = ({ title, desc, children, first = false }) => (
   </div>
 )
 
-/* Gesture binding row (native select for reliability) */
-const BindingRow = ({ gesture, value, options, labels, onChange, first = false }) => (
+/* Animated custom dropdown — replaces native <select> for binding rows */
+const Dropdown = ({ value, options, labels, onChange }) => {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const displayLabel = labels[value] ?? value
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth: 0 }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', padding: '5px 8px 5px 10px',
+        background: open ? 'var(--surface-3)' : 'var(--surface-2)',
+        color: 'var(--text)',
+        border: '1px solid ' + (open ? 'var(--border-light)' : 'var(--border)'),
+        borderRadius: 7, fontSize: 12, fontWeight: 500,
+        display: 'flex', alignItems: 'center', gap: 6,
+        transition: 'all 140ms var(--ease-out)', textAlign: 'left',
+        cursor: 'pointer',
+      }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
+        <IconChevronDown size={11} sw={1.7} style={{ color: 'var(--text-3)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 160ms' }}/>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: 'var(--surface)', border: '1px solid var(--border-light)', borderRadius: 8,
+          padding: 3, zIndex: 20, boxShadow: 'var(--shadow-card)',
+          maxHeight: 240, overflowY: 'auto', animation: 'soft-in 160ms var(--ease-out)',
+        }}>
+          {options.map(o => {
+            const label = labels[o] ?? o
+            const active = o === value
+            return (
+              <button key={o} onClick={() => { onChange(o); setOpen(false) }} style={{
+                width: '100%', padding: '6px 9px', borderRadius: 5,
+                textAlign: 'left', fontSize: 12,
+                background: active ? 'var(--accent-dim)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text)',
+                transition: 'background 100ms', cursor: 'pointer',
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface-2)' }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* Gesture binding row */
+const BindingRow = ({ gesture, icon, value, options, labels, onChange, first = false }) => (
   <div style={{
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '8px 14px',
+    display: 'grid', gridTemplateColumns: '20px 1fr 148px',
+    alignItems: 'center', gap: 10,
+    padding: '9px 14px',
     borderTop: first ? 'none' : '1px solid var(--border)',
   }}>
-    <span style={{ fontSize: 12.5, flex: 1 }}>{gesture}</span>
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        fontSize: 12, fontFamily: 'var(--font-ui)',
-        background: 'var(--surface-2)', color: 'var(--text)',
-        border: '1px solid var(--border)', borderRadius: 6,
-        padding: '5px 8px', outline: 'none',
-        width: 148, flexShrink: 0,
-        transition: 'border-color 150ms',
-      }}
-    >
-      {options.map(c => (
-        <option key={c} value={c}>{labels[c] ?? COMMAND_LABELS[c] ?? c}</option>
-      ))}
-    </select>
+    <span style={{ color: 'var(--text-2)', display: 'flex', justifyContent: 'center' }}>
+      {icon}
+    </span>
+    <span style={{ fontSize: 12.5 }}>{gesture}</span>
+    <Dropdown value={value} options={options} labels={labels} onChange={onChange}/>
   </div>
 )
 
@@ -727,18 +845,8 @@ export default function App() {
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '17px 20px 14px' }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-          background: 'var(--surface-3)', border: '1px solid var(--border-mid)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--text)" strokeWidth="0"/>
-            <path d="M2 17l10 5 10-5" stroke="var(--text)" strokeWidth="2.5" strokeLinecap="round"/>
-            <path d="M2 12l10 5 10-5" stroke="var(--text)" strokeWidth="2.5" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>Nodex</span>
+        <NodexLogo size={22}/>
+        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.015em', color: 'var(--text)' }}>Nodex</span>
         <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 1 }}>v1.1</span>
       </div>
 
@@ -833,13 +941,10 @@ function NoTabState() {
         width: 40, height: 40, borderRadius: 10,
         background: 'var(--surface)', border: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--text-2)',
         marginBottom: 18,
       }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-          stroke="var(--text-2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2"/>
-          <path d="M8 21h8M12 17v4"/>
-        </svg>
+        <IconPlayer size={20} sw={1.5}/>
       </div>
       <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 6 }}>
         Open a video to begin
@@ -996,12 +1101,7 @@ function MainScreen({
             borderRadius: 12, padding: '12px 14px',
             display: 'flex', alignItems: 'flex-start', gap: 10,
           }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
-              style={{ flexShrink: 0, marginTop: 2 }}>
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-            </svg>
+            <IconInfo size={14} sw={2} style={{ flexShrink: 0, marginTop: 2, color: 'var(--amber)' }}/>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
                 Blink calibration expired
@@ -1027,11 +1127,7 @@ function MainScreen({
             borderRadius: 12, padding: '14px 16px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
+              <IconEye size={14} sw={2} style={{ color: 'var(--accent)' }}/>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
                 Eye blink not configured
               </span>
@@ -1068,13 +1164,7 @@ function MainScreen({
           borderRadius: 10, padding: '10px 13px',
           display: 'flex', gap: 9, alignItems: 'flex-start',
         }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-            stroke="var(--red)" strokeWidth="2" strokeLinecap="round"
-            style={{ flexShrink: 0, marginTop: 1 }}>
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-          </svg>
+          <IconInfo size={13} sw={2} style={{ flexShrink: 0, marginTop: 1, color: 'var(--red)' }}/>
           <div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--red)', marginBottom: 3 }}>Camera error</div>
             <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{startError}</div>
@@ -1207,11 +1297,7 @@ function FirstLaunchHint({ onCalibrate, onSkip }) {
       borderRadius: 12, padding: '14px 16px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
+        <IconEye size={14} sw={2} style={{ color: 'var(--accent)' }}/>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)' }}>
           Set up blink detection first
         </span>
@@ -1328,10 +1414,7 @@ function CalibrationScreen({ running, sendToContent }) {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '0 14px 12px',
         }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-            stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round">
-            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-          </svg>
+          <IconClock size={11} sw={2} style={{ color: 'var(--text-3)' }}/>
           <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
             {dateStr}
           </span>
@@ -1345,12 +1428,7 @@ function CalibrationScreen({ running, sendToContent }) {
             background: 'var(--surface-2)', border: '1px solid var(--border)',
             borderRadius: 8, padding: '9px 11px',
           }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-              stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
-              style={{ flexShrink: 0, marginTop: 1 }}>
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-            </svg>
+            <IconInfo size={13} sw={2} style={{ flexShrink: 0, marginTop: 1, color: 'var(--amber)' }}/>
             <span style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
               Start the camera from Home — calibration needs a live face feed.
             </span>
@@ -1532,6 +1610,7 @@ function SettingsScreen({
               key={g}
               first={i === 0}
               gesture={GESTURE_LABELS[g] ?? g}
+              icon={GESTURE_ICONS[g]}
               value={currentMap[g] ?? COMMANDS.NONE}
               options={commandOptions}
               labels={labels}
@@ -1581,10 +1660,7 @@ function SettingsScreen({
       {/* ── Data ── */}
       <SectionCard title="Data" desc="Your information stays on this device">
         <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-            stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round">
-            <rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>
-          </svg>
+          <IconShield size={13} sw={1.8} style={{ color: 'var(--text-3)', flexShrink: 0 }}/>
           <span style={{ fontSize: 11.5, color: 'var(--text-2)', flex: 1 }}>
             All data stored locally — nothing sent to any server.
           </span>
