@@ -18,22 +18,58 @@ import {
   loadCalibration,
 } from '../shared/storage.js'
 import CalibrationWizard from './CalibrationWizard.jsx'
-import MetricBar from './MetricBar.jsx'
 
-/* ── helpers ── */
+/* ──────────────────────────────────────────────────────
+   THEME / ACCENT HELPERS
+   (OKLCH → sRGB conversion, system theme hook)
+────────────────────────────────────────────────────── */
+
+function oklchToHex(l, c, h) {
+  const hr = h * Math.PI / 180
+  const a = c * Math.cos(hr), b = c * Math.sin(hr)
+  const l_ = l + 0.3963377774 * a + 0.2158037573 * b
+  const m_ = l - 0.1055613458 * a - 0.0638541728 * b
+  const s_ = l - 0.0894841775 * a - 1.2914855480 * b
+  const L = l_ ** 3, M = m_ ** 3, S = s_ ** 3
+  let r  =  4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S
+  let g  = -1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S
+  let bl = -0.0041960863 * L - 0.7034186147 * M + 1.7076147010 * S
+  const gm = x => x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(0, x), 1 / 2.4) - 0.055
+  r = Math.max(0, Math.min(1, gm(r))); g = Math.max(0, Math.min(1, gm(g))); bl = Math.max(0, Math.min(1, gm(bl)))
+  const toH = v => Math.round(v * 255).toString(16).padStart(2, '0')
+  return `#${toH(r)}${toH(g)}${toH(bl)}`
+}
+
+const hexToRgb = h => ({
+  r: parseInt(h.slice(1, 3), 16),
+  g: parseInt(h.slice(3, 5), 16),
+  b: parseInt(h.slice(5, 7), 16),
+})
+
+function useSystemTheme() {
+  const [sys, setSys] = useState(
+    () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const h = e => setSys(e.matches ? 'dark' : 'light')
+    mq.addEventListener?.('change', h)
+    return () => mq.removeEventListener?.('change', h)
+  }, [])
+  return sys
+}
+
+/* ──────────────────────────────────────────────────────
+   CHROME MESSAGING HELPERS  (unchanged from v1.1)
+────────────────────────────────────────────────────── */
 
 /**
- * Active YouTube tab in the current window — synced from App via useEffect (same role as useRef).
- * Module-level sendToContent and filters read `.current` so onMessage never uses a stale tab id.
+ * Active YouTube tab in the current window — synced from App via useEffect.
+ * Module-level so onMessage callbacks never read a stale tab id.
  * @type {{ current: number | null }}
  */
 const activeYouTubeTabIdRef = { current: null }
 
-/**
- * Ignore relayed content messages when they come from a tab other than the one the user is viewing.
- * Legacy messages without __sourceTabId are always applied.
- * @param {unknown} message
- */
 function shouldIgnoreSidePanelMessage(message) {
   if (!message || typeof message !== 'object') return false
   const id = /** @type {{ __sourceTabId?: number }} */ (message).__sourceTabId
@@ -68,19 +104,17 @@ async function sendToContent(payload) {
   }
 }
 
-/** Ask a specific tab's content script for ENGINE_STATUS (via service worker). */
 async function requestEngineStatus() {
   const tabId = activeYouTubeTabIdRef.current
   if (tabId == null) return
   try {
-    await chrome.runtime.sendMessage({
-      type: MSG.REQUEST_STATUS,
-      tabId,
-    })
-  } catch {
-    /* ignore */
-  }
+    await chrome.runtime.sendMessage({ type: MSG.REQUEST_STATUS, tabId })
+  } catch { /* ignore */ }
 }
+
+/* ──────────────────────────────────────────────────────
+   LABEL MAPS  (unchanged)
+────────────────────────────────────────────────────── */
 
 const GESTURE_LABELS = {
   [GESTURES.HEAD_LEFT]:   'Head Left',
@@ -127,250 +161,415 @@ const BROWSE_COMMANDS = [
   COMMANDS.PLAY_PAUSE, COMMANDS.BACK, COMMANDS.TOGGLE_MODE, COMMANDS.NONE,
 ]
 
-/* ── styles ── */
+/* ──────────────────────────────────────────────────────
+   NEW UI PRIMITIVES
+────────────────────────────────────────────────────── */
 
-const S = {
-  app: {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100vh',
-    background: 'var(--bg)',
-  },
-
-  // ── Header bar ──
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '14px 16px 0',
-  },
-  logo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  logoMark: {
-    width: '22px',
-    height: '22px',
-    borderRadius: '6px',
-    background: 'var(--accent)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: '14px',
-    fontWeight: 700,
-    color: 'var(--text)',
-    letterSpacing: '0.06em',
-  },
-  versionBadge: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '10px',
-    color: 'var(--muted)',
-    background: 'var(--surface-2)',
-    border: '1px solid var(--border)',
-    borderRadius: '4px',
-    padding: '2px 6px',
-    letterSpacing: '0.02em',
-  },
-
-  // ── Nav tabs ──
-  navWrap: {
-    padding: '12px 16px 0',
-  },
-  nav: {
-    display: 'flex',
-    gap: '2px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: '10px',
-    padding: '3px',
-  },
-  navBtn: {
-    flex: 1,
-    fontFamily: 'var(--font-ui)',
-    fontSize: '12px',
-    fontWeight: 500,
-    padding: '7px 0',
-    border: 'none',
-    borderRadius: '7px',
-    cursor: 'pointer',
-    background: 'transparent',
-    color: 'var(--muted)',
-    transition: 'all 0.18s',
-    letterSpacing: '0.01em',
-  },
-  navBtnActive: {
-    background: 'var(--surface-3)',
-    color: 'var(--text)',
-    fontWeight: 600,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-  },
-
-  // ── Content area ──
-  content: {
-    padding: '12px 16px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    flex: 1,
-  },
-
-  // ── Cards ──
-  card: {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    padding: '16px',
-  },
-  cardFlush: {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    overflow: 'hidden',
-  },
-
-  // ── Section labels ──
-  sectionLabel: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '10px',
-    fontWeight: 600,
-    color: 'var(--muted)',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    marginBottom: '10px',
-  },
-
-  // ── Buttons ──
-  btn: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '13px',
-    fontWeight: 600,
-    padding: '10px 0',
-    border: 'none',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    width: '100%',
-    transition: 'opacity 0.15s, background 0.15s',
-    letterSpacing: '0.01em',
-  },
-  btnPrimary: {
-    background: 'var(--accent)',
-    color: '#060f0c',
-  },
-  btnStop: {
-    background: 'var(--surface-3)',
-    color: 'var(--text-2)',
-    border: '1px solid var(--border-mid)',
-  },
-  btnSecondary: {
-    background: 'transparent',
-    color: 'var(--muted)',
-    border: '1px solid var(--border)',
-  },
-  btnGhost: {
-    background: 'transparent',
-    color: 'var(--muted)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '9px 14px',
-    fontFamily: 'var(--font-ui)',
-    fontSize: '12px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    letterSpacing: '0.01em',
-  },
-
-  // ── Status dot ──
-  dot: (isActive, isLoading = false) => ({
-    display: 'inline-block',
-    width: '7px',
-    height: '7px',
-    borderRadius: '50%',
-    flexShrink: 0,
-    background: isActive ? 'var(--green)' : isLoading ? 'var(--amber)' : 'var(--muted)',
-    animation: isActive ? 'pulse-dot 2.4s ease-in-out infinite' : 'none',
-  }),
-
-  // ── Metric tiles ──
-  metricLabel: { color: 'var(--muted)', fontSize: '10px', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' },
-  metricValue: {
-    color: 'var(--accent)',
-    fontWeight: 600,
-    fontFamily: 'var(--font-mono)',
-    fontSize: '12px',
-  },
-  metricTile: {
-    background: 'var(--bg)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '8px 10px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-  },
-
-  // ── Select ──
-  select: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '12px',
-    background: 'var(--bg)',
-    color: 'var(--text)',
-    border: '1px solid var(--border)',
-    borderRadius: '6px',
-    padding: '6px 8px',
-    width: '100%',
-    outline: 'none',
-    transition: 'border-color 0.15s',
-  },
-
-  // ── Gesture table ──
-  gestureRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-    padding: '8px 0',
-    borderBottom: '1px solid var(--border)',
-  },
-  gestureLabel: {
-    fontFamily: 'var(--font-ui)',
-    fontSize: '12px',
-    flex: '1 1 auto',
-    whiteSpace: 'nowrap',
-    color: 'var(--text-2)',
-  },
-  gestureSelect: { flex: '0 0 128px' },
-
-  // ── Divider ──
-  divider: {
-    height: '1px',
-    background: 'var(--border)',
-    margin: '12px 0',
-  },
-
-  // ── Progress ──
-  progressBar: {
-    width: '100%', height: '3px',
-    background: 'var(--border)',
-    borderRadius: '2px',
-    overflow: 'hidden',
-    marginTop: '10px',
-  },
-  progressFill: (pct) => ({
-    width: `${pct}%`, height: '100%',
-    background: 'var(--accent)',
-    transition: 'width 0.2s',
-    borderRadius: '2px',
-  }),
+/* Pulsing status dot */
+const StatusDot = ({ state = 'active' }) => {
+  const color =
+    state === 'active'  ? 'var(--green)'  :
+    state === 'warning' ? 'var(--amber)'  : 'var(--muted)'
+  return (
+    <span style={{
+      display: 'inline-block',
+      width: 6, height: 6, borderRadius: '50%',
+      background: color, color,
+      flexShrink: 0,
+      animation: state === 'active' ? 'pulse-dot 1.8s infinite' : 'none',
+    }}/>
+  )
 }
 
-/* ── App ── */
+/* Inline tracking status chip */
+const TrackingChip = ({ running, browseMode, isLoading }) => {
+  const state = isLoading ? 'warning' : running ? 'active' : 'idle'
+  const label = isLoading ? 'Starting…' : running ? 'Tracking' : 'Idle'
+  const mode  = browseMode ? 'Browse' : 'Player'
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      padding: '5px 11px 5px 9px', borderRadius: 999,
+      background: running ? 'var(--accent-dim)' : 'var(--surface-2)',
+      border: '1px solid ' + (running ? 'rgba(var(--accent-rgb),0.22)' : 'var(--border)'),
+      fontSize: 11.5, fontWeight: 500,
+      color: running ? 'var(--accent)' : 'var(--text-2)',
+      transition: 'all 200ms var(--ease-out)',
+    }}>
+      <StatusDot state={state}/>
+      <span>{label}</span>
+      {running && !isLoading && <>
+        <span style={{ width: 1, height: 10, background: 'currentColor', opacity: 0.2 }}/>
+        <span style={{ opacity: 0.7 }}>{mode}</span>
+      </>}
+    </div>
+  )
+}
+
+/* Live face position visualizer */
+const FaceViz = ({ metrics, running }) => {
+  const [smooth, setSmooth] = useState({ x: 0, y: 0 })
+  const rafRef = useRef(null)
+  const lastRef = useRef(performance.now())
+
+  useEffect(() => {
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - lastRef.current) / 1000)
+      lastRef.current = now
+      if (metrics) {
+        setSmooth(prev => ({
+          x: prev.x + (metrics.yaw   - prev.x) * Math.min(1, dt * 8),
+          y: prev.y + (metrics.pitch - prev.y) * Math.min(1, dt * 8),
+        }))
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [metrics])
+
+  return (
+    <div style={{
+      position: 'relative',
+      aspectRatio: '2 / 1',
+      borderRadius: 12,
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      overflow: 'hidden',
+    }}>
+      {/* dot grid background */}
+      <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.45 }}>
+        <defs>
+          <pattern id="fv-dots" width="14" height="14" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.6" fill="var(--text-3)" opacity="0.3"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#fv-dots)"/>
+      </svg>
+
+      {/* face circle + dot */}
+      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+        {/* outer guide circle */}
+        <div style={{
+          width: '52%', aspectRatio: '1/1', borderRadius: '50%',
+          border: '1px solid var(--accent)',
+          background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.05), transparent 70%)',
+          position: 'absolute',
+        }}/>
+        {/* moving dot */}
+        <div style={{
+          transform: `translate(${smooth.x * 2.4}px, ${-smooth.y * 2.4}px)`,
+          transition: 'transform 40ms linear',
+        }}>
+          <div style={{
+            width: 9, height: 9, borderRadius: '50%',
+            background: 'var(--accent)',
+            boxShadow: '0 0 8px rgba(var(--accent-rgb), 0.55)',
+            animation: running && metrics ? 'pose-breathe 3s ease-in-out infinite' : 'none',
+          }}/>
+        </div>
+      </div>
+
+      {/* corner label */}
+      <span style={{
+        position: 'absolute', top: 9, left: 12,
+        fontSize: 10, color: 'var(--text-3)',
+        fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
+      }}>POSE</span>
+    </div>
+  )
+}
+
+/* Thin threshold gauge bar */
+const ThresholdBar = ({ value, max, threshold, type = 'centered', triggerBelow = false }) => {
+  const pct = Math.max(-1, Math.min(1, value / max))
+  const absPct = Math.min(1, Math.abs(value) / max)
+  const triggered = triggerBelow ? value <= threshold : Math.abs(value) >= threshold
+  const near = triggerBelow
+    ? value <= threshold * 1.3
+    : Math.abs(value) >= threshold * 0.7
+  const tPct = Math.min(1, threshold / max)
+  const color = triggered ? 'var(--accent)' : near ? 'var(--accent)' : 'var(--text-2)'
+  const opacity = triggered ? 1 : near ? 0.7 : 0.4
+
+  return (
+    <div style={{
+      position: 'relative', height: 4, borderRadius: 999,
+      background: 'var(--surface-3)', overflow: 'visible',
+    }}>
+      {type === 'centered' ? (
+        <>
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: pct >= 0 ? '50%' : `${50 + pct * 50}%`,
+            width: `${absPct * 50}%`,
+            background: color, opacity,
+            borderRadius: 999,
+            transition: 'left 60ms linear, width 60ms linear, opacity 180ms',
+          }}/>
+          {/* center tick */}
+          <div style={{ position: 'absolute', top: -1, bottom: -1, left: '50%', width: 1, background: 'var(--border-light)' }}/>
+          {/* threshold markers */}
+          <div style={{ position: 'absolute', top: -2, bottom: -2, left: `${50 + tPct * 50}%`, width: 1.5, background: 'var(--text-3)', opacity: 0.4 }}/>
+          <div style={{ position: 'absolute', top: -2, bottom: -2, left: `${50 - tPct * 50}%`, width: 1.5, background: 'var(--text-3)', opacity: 0.4 }}/>
+        </>
+      ) : (
+        <>
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, left: 0,
+            width: `${Math.max(0, Math.min(1, value / max)) * 100}%`,
+            background: color, opacity,
+            borderRadius: 999,
+            transition: 'width 60ms linear, opacity 180ms',
+          }}/>
+          <div style={{ position: 'absolute', top: -2, bottom: -2, left: `${tPct * 100}%`, width: 1.5, background: 'var(--text-3)', opacity: 0.4 }}/>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* Metric row: label + value + gauge */
+const MetricRow = ({ label, value, max, threshold, type = 'centered', unit = '°', triggerBelow = false }) => {
+  const triggered = triggerBelow ? value <= threshold : Math.abs(value) >= threshold
+  const display = type === 'centered'
+    ? (value >= 0 ? '+' : '') + value.toFixed(1) + unit
+    : value.toFixed(2)
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 6, gap: 12 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-2)', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</span>
+        <div style={{ flex: 1 }}/>
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500,
+          color: triggered ? 'var(--accent)' : 'var(--text)',
+          fontFeatureSettings: "'tnum'",
+          transition: 'color 180ms',
+          whiteSpace: 'nowrap',
+        }}>{display}</span>
+      </div>
+      <ThresholdBar value={value} max={max} threshold={threshold} type={type} triggerBelow={triggerBelow}/>
+    </div>
+  )
+}
+
+/* Toggle switch (button-based, no hidden input) */
+const Toggle = ({ on, onChange }) => (
+  <button
+    onClick={() => onChange(!on)}
+    aria-pressed={on}
+    style={{
+      width: 32, height: 19, borderRadius: 999, padding: 0, flexShrink: 0,
+      background: on ? 'var(--accent)' : 'var(--surface-3)',
+      border: '1px solid ' + (on ? 'rgba(var(--accent-rgb),0.3)' : 'var(--border-mid)'),
+      position: 'relative',
+      transition: 'background 200ms var(--ease-out), border-color 200ms',
+    }}
+  >
+    <span style={{
+      position: 'absolute', top: 2, left: on ? 13 : 2,
+      width: 13, height: 13, borderRadius: '50%',
+      background: on ? 'var(--accent-ink)' : 'var(--text-2)',
+      transition: 'left 200ms var(--ease-out)',
+    }}/>
+  </button>
+)
+
+/* Settings card wrapper */
+const SectionCard = ({ title, desc, children }) => (
+  <div style={{
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    animation: 'fade-in 220ms var(--ease-out) both',
+  }}>
+    <div style={{ padding: '11px 14px 10px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
+      {desc && <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 2 }}>{desc}</div>}
+    </div>
+    {children}
+  </div>
+)
+
+/* Settings row inside SectionCard */
+const SettingsRow = ({ title, desc, children, first = false }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '11px 14px',
+    borderTop: first ? 'none' : '1px solid var(--border)',
+  }}>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 500 }}>{title}</div>
+      {desc && <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 1 }}>{desc}</div>}
+    </div>
+    {children}
+  </div>
+)
+
+/* Gesture binding row (native select for reliability) */
+const BindingRow = ({ gesture, value, options, labels, onChange, first = false }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '8px 14px',
+    borderTop: first ? 'none' : '1px solid var(--border)',
+  }}>
+    <span style={{ fontSize: 12.5, flex: 1 }}>{gesture}</span>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        fontSize: 12, fontFamily: 'var(--font-ui)',
+        background: 'var(--surface-2)', color: 'var(--text)',
+        border: '1px solid var(--border)', borderRadius: 6,
+        padding: '5px 8px', outline: 'none',
+        width: 148, flexShrink: 0,
+        transition: 'border-color 150ms',
+      }}
+    >
+      {options.map(c => (
+        <option key={c} value={c}>{labels[c] ?? COMMAND_LABELS[c] ?? c}</option>
+      ))}
+    </select>
+  </div>
+)
+
+/* Theme picker (Light / Dark / System) */
+const ThemePicker = ({ theme, setTheme }) => {
+  const opts = [
+    { k: 'light', l: 'Light' },
+    { k: 'dark',  l: 'Dark'  },
+    { k: 'system', l: 'System' },
+  ]
+  return (
+    <div style={{
+      display: 'flex', gap: 3, padding: 3,
+      background: 'var(--surface-2)', border: '1px solid var(--border)',
+      borderRadius: 8,
+    }}>
+      {opts.map(o => (
+        <button key={o.k} onClick={() => setTheme(o.k)} style={{
+          flex: 1, padding: '6px 8px', borderRadius: 5,
+          background: theme === o.k ? 'var(--surface)' : 'transparent',
+          color: theme === o.k ? 'var(--text)' : 'var(--text-2)',
+          boxShadow: theme === o.k ? 'var(--shadow-soft)' : 'none',
+          fontSize: 11.5, fontWeight: 500,
+          transition: 'all 160ms var(--ease-out)',
+        }}>{o.l}</button>
+      ))}
+    </div>
+  )
+}
+
+/* Accent color picker */
+const ACCENT_PRESETS = [
+  { id: 170, label: 'Mint'   },
+  { id: 125, label: 'Lime'   },
+  { id: 80,  label: 'Yellow' },
+  { id: 230, label: 'Blue'   },
+  { id: 40,  label: 'Peach'  },
+  { id: 350, label: 'Pink'   },
+]
+
+function accentPreview(hue, effectiveTheme) {
+  return oklchToHex(effectiveTheme === 'light' ? 0.55 : 0.8, 0.14, hue)
+}
+
+const AccentPicker = ({ mode, hue, setMode, setHue, effectiveTheme }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+    {ACCENT_PRESETS.map(p => {
+      const active = mode === 'color' && Math.abs(hue - p.id) < 5
+      const preview = accentPreview(p.id, effectiveTheme)
+      return (
+        <button key={p.id} onClick={() => { setMode('color'); setHue(p.id) }} title={p.label} style={{
+          aspectRatio: '1/1', borderRadius: 8,
+          background: preview,
+          border: '2px solid ' + (active ? preview : 'transparent'),
+          outline: active ? '2px solid var(--bg)' : 'none',
+          outlineOffset: -4,
+          transform: active ? 'scale(1.08)' : 'scale(1)',
+          transition: 'transform 140ms var(--ease-out), outline 140ms',
+        }}/>
+      )
+    })}
+    {/* Minimal (monochrome) swatch */}
+    {(() => {
+      const active = mode === 'minimal'
+      const bg = effectiveTheme === 'light' ? '#1a1d21' : '#f0f1f3'
+      return (
+        <button onClick={() => setMode('minimal')} title="Minimal" style={{
+          aspectRatio: '1/1', borderRadius: 8,
+          background: bg,
+          border: '2px solid ' + (active ? bg : 'transparent'),
+          outline: active ? '2px solid var(--bg)' : 'none',
+          outlineOffset: -4,
+          display: 'grid', placeItems: 'center',
+          fontSize: 9, fontWeight: 700,
+          color: effectiveTheme === 'light' ? '#fff' : '#0a0b0d',
+          transform: active ? 'scale(1.08)' : 'scale(1)',
+          transition: 'transform 140ms var(--ease-out), outline 140ms',
+        }}>Aa</button>
+      )
+    })()}
+  </div>
+)
+
+/* ──────────────────────────────────────────────────────
+   APP ROOT
+────────────────────────────────────────────────────── */
 
 export default function App() {
+  /* ── Theme / accent ── */
+  const [theme, setThemeState] = useState('dark')           // 'light' | 'dark' | 'system'
+  const [accentMode, setAccentModeState] = useState('minimal') // 'minimal' | 'color'
+  const [accentHue, setAccentHueState] = useState(170)
+  const sys = useSystemTheme()
+  const effectiveTheme = theme === 'system' ? sys : theme
+
+  useEffect(() => {
+    chrome.storage.local
+      .get(['nodex_theme', 'nodex_accent_mode', 'nodex_accent_hue'])
+      .then(r => {
+        if (r.nodex_theme) setThemeState(r.nodex_theme)
+        if (r.nodex_accent_mode) setAccentModeState(r.nodex_accent_mode)
+        if (typeof r.nodex_accent_hue === 'number') setAccentHueState(r.nodex_accent_hue)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', effectiveTheme)
+  }, [effectiveTheme])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (accentMode === 'minimal') {
+      root.style.removeProperty('--accent')
+      root.style.removeProperty('--accent-rgb')
+      root.style.removeProperty('--accent-ink')
+    } else {
+      const hex = oklchToHex(effectiveTheme === 'light' ? 0.55 : 0.82, 0.14, accentHue)
+      const rgb = hexToRgb(hex)
+      root.style.setProperty('--accent', hex)
+      root.style.setProperty('--accent-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`)
+      root.style.setProperty('--accent-ink', effectiveTheme === 'light' ? '#ffffff' : '#060709')
+    }
+  }, [accentMode, accentHue, effectiveTheme])
+
+  const handleSetTheme = useCallback((t) => {
+    setThemeState(t)
+    chrome.storage.local.set({ nodex_theme: t }).catch(() => {})
+  }, [])
+  const handleSetAccentMode = useCallback((m) => {
+    setAccentModeState(m)
+    chrome.storage.local.set({ nodex_accent_mode: m }).catch(() => {})
+  }, [])
+  const handleSetAccentHue = useCallback((h) => {
+    setAccentHueState(h)
+    chrome.storage.local.set({ nodex_accent_hue: h }).catch(() => {})
+  }, [])
+
+  /* ── Engine / tab state (unchanged from v1.1) ── */
   const [firstRunWizard, setFirstRunWizard] = useState(false)
   const [screen, setScreen] = useState('main')
   const [running, setRunning] = useState(false)
@@ -378,24 +577,14 @@ export default function App() {
   const [modeChanging, setModeChanging] = useState(false)
   const [metrics, setMetrics] = useState(null)
   const [lastCommand, setLastCommand] = useState(null)
-
   const [activeTabId, setActiveTabId] = useState(/** @type {number | null} */ (null))
-  /** Keeps `activeYouTubeTabIdRef` in sync for filters/sendToContent (avoids stale closure in onMessage). */
   const activeTabIdRef = useRef(/** @type {number | null} */ (null))
-
   const [autoPause, setAutoPause] = useState(false)
   const [blinkCalibNeeded, setBlinkCalibNeeded] = useState(false)
-
-  // Total number of times the user has started the engine (persisted across sessions).
-  // Used to detect first-launch and show the calibration nudge.
   const [launchCount, setLaunchCount] = useState(/** @type {number|null} */ (null))
   const launchCountRef          = useRef(0)
   const launchPrevRunningRef    = useRef(false)
   const launchHasIncrementedRef = useRef(false)
-
-  // Lifted to App so they survive MainScreen unmount/remount (screen tab changes).
-  // firstLaunchHintDismissed: user explicitly chose "Start without calibrating".
-  // autoNavFiredRef: prevents the auto-navigate from re-triggering after it fires once.
   const [firstLaunchHintDismissed, setFirstLaunchHintDismissed] = useState(false)
   const autoNavFiredRef = useRef(false)
 
@@ -411,10 +600,7 @@ export default function App() {
       if (!cancelled) setActiveTabId(id)
     }
     void refresh()
-
-    const onActivated = () => {
-      void refresh()
-    }
+    const onActivated = () => { void refresh() }
     const onFocusChanged = (windowId) => {
       if (windowId === chrome.windows.WINDOW_ID_NONE) return
       void refresh()
@@ -430,11 +616,8 @@ export default function App() {
 
   useEffect(() => {
     if (activeTabId == null) {
-      setRunning(false)
-      setBrowseMode(false)
-      setModeChanging(false)
-      setMetrics(null)
-      setLastCommand(null)
+      setRunning(false); setBrowseMode(false); setModeChanging(false)
+      setMetrics(null); setLastCommand(null)
       return
     }
     void requestEngineStatus()
@@ -445,21 +628,16 @@ export default function App() {
       if (!calibrationCompleted) setFirstRunWizard(true)
     })
     const onCh = (changes, area) => {
-      if (area === 'local' && changes.calibrationCompleted?.newValue) {
-        setFirstRunWizard(false)
-      }
+      if (area === 'local' && changes.calibrationCompleted?.newValue) setFirstRunWizard(false)
     }
     chrome.storage.onChanged.addListener(onCh)
     return () => chrome.storage.onChanged.removeListener(onCh)
   }, [])
 
   useEffect(() => {
-    loadSettings({}).then((settings) => {
-      setAutoPause(Boolean(settings.auto_pause_on_no_face))
-    })
+    loadSettings({}).then((settings) => { setAutoPause(Boolean(settings.auto_pause_on_no_face)) })
   }, [])
 
-  // Load engine-start count from storage (0 for brand-new installs).
   useEffect(() => {
     chrome.storage.local.get('nodex_start_count')
       .then(({ nodex_start_count }) => {
@@ -470,8 +648,6 @@ export default function App() {
       .catch(() => setLaunchCount(0))
   }, [])
 
-  // Increment the counter once per side-panel session when the engine starts.
-  // A ref guard prevents inflate from start→stop→start within one session.
   useEffect(() => {
     if (running && !launchPrevRunningRef.current) {
       if (!launchHasIncrementedRef.current) {
@@ -485,13 +661,11 @@ export default function App() {
     launchPrevRunningRef.current = running
   }, [running])
 
-  const handleAutoPauseToggle = useCallback((e) => {
-    const enabled = e.target.checked
-    setAutoPause(enabled)
-    sendToContent({ type: MSG.SET_AUTO_PAUSE, enabled })
+  const handleAutoPauseToggle = useCallback((value) => {
+    setAutoPause(value)
+    sendToContent({ type: MSG.SET_AUTO_PAUSE, enabled: value })
   }, [])
 
-  // Stable callback so MainScreen's auto-navigate effect doesn't re-fire on every render.
   const handleGoCalibrate = useCallback(() => {
     setBlinkCalibNeeded(false)
     setScreen('calibration')
@@ -524,34 +698,24 @@ export default function App() {
           break
       }
     }
-
     chrome.runtime.onMessage.addListener(listener)
-
     return () => chrome.runtime.onMessage.removeListener(listener)
   }, [])
 
-  // Auto-clear blink alert when a fresh calibration is saved to storage.
-  // Covers the case where the user navigates to Calibrate manually (without
-  // clicking the alert button), completes calibration, then returns to Home —
-  // without this, the stale blinkCalibNeeded=true would show a confusing
-  // "Re-calibrate" banner immediately after a successful calibration.
   useEffect(() => {
     const onCh = (changes, area) => {
       if (area !== 'local') return
-      if (changes.earCalibration?.newValue != null) {
-        setBlinkCalibNeeded(false)
-      }
+      if (changes.earCalibration?.newValue != null) setBlinkCalibNeeded(false)
     }
     chrome.storage.onChanged.addListener(onCh)
     return () => chrome.storage.onChanged.removeListener(onCh)
   }, [])
 
-  // First launch: user has started the engine ≤1 time ever.
-  // launchCount=0 before the first start; =1 right after; >1 for returning users.
   const isFirstLaunch = launchCount != null && launchCount <= 1
 
+  /* ── Render ── */
   return (
-    <div style={S.app}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
       {firstRunWizard && (
         <CalibrationWizard
           mode="full"
@@ -562,40 +726,55 @@ export default function App() {
       )}
 
       {/* ── Header ── */}
-      <div style={S.header}>
-        <div style={S.logo}>
-          <div style={S.logoMark}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#060f0c" strokeWidth="0"/>
-              <path d="M2 17l10 5 10-5" stroke="#060f0c" strokeWidth="2.5" strokeLinecap="round"/>
-              <path d="M2 12l10 5 10-5" stroke="#060f0c" strokeWidth="2.5" strokeLinecap="round"/>
-            </svg>
-          </div>
-          <span style={S.logoText}>NODEX</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '17px 20px 14px' }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: 'var(--surface-3)', border: '1px solid var(--border-mid)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="var(--text)" strokeWidth="0"/>
+            <path d="M2 17l10 5 10-5" stroke="var(--text)" strokeWidth="2.5" strokeLinecap="round"/>
+            <path d="M2 12l10 5 10-5" stroke="var(--text)" strokeWidth="2.5" strokeLinecap="round"/>
+          </svg>
         </div>
-        <span style={S.versionBadge}>v1.1</span>
+        <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>Nodex</span>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginLeft: 1 }}>v1.1</span>
       </div>
 
-      {/* ── Nav ── */}
-      <div style={S.navWrap}>
-        <div style={S.nav}>
-          {['main', 'calibration', 'settings'].map((s) => (
-            <button
-              key={s}
-              style={{ ...S.navBtn, ...(screen === s ? S.navBtnActive : {}) }}
-              onClick={() => {
-                if (s === 'calibration') setBlinkCalibNeeded(false)
-                setScreen(s)
-              }}
-            >
-              {{ main: 'Home', calibration: 'Calibrate', settings: 'Settings' }[s]}
-            </button>
-          ))}
-        </div>
+      {/* ── Nav (underline tabs) ── */}
+      <div style={{ display: 'flex', gap: 20, padding: '0 20px', borderBottom: '1px solid var(--border)' }}>
+        {[
+          ['main',        'Home'],
+          ['calibration', 'Calibrate'],
+          ['settings',    'Settings'],
+        ].map(([s, l]) => (
+          <button
+            key={s}
+            onClick={() => {
+              if (s === 'calibration') setBlinkCalibNeeded(false)
+              setScreen(s)
+            }}
+            style={{
+              padding: '10px 0 12px', position: 'relative',
+              color: screen === s ? 'var(--text)' : 'var(--text-2)',
+              fontSize: 13, fontWeight: 500,
+              transition: 'color 150ms',
+            }}
+          >
+            {l}
+            <span style={{
+              position: 'absolute', left: 0, right: 0, bottom: -1, height: 1.5,
+              background: screen === s ? 'var(--accent)' : 'transparent',
+              borderRadius: 2,
+              transition: 'background 150ms',
+            }}/>
+          </button>
+        ))}
       </div>
 
       {/* ── Content ── */}
-      <div style={S.content}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {screen === 'main' && activeTabId === null && <NoTabState />}
         {screen === 'main' && activeTabId !== null && (
           <MainScreen
@@ -623,49 +802,55 @@ export default function App() {
           <CalibrationScreen running={running} sendToContent={sendToContent} />
         )}
         {screen === 'settings' && (
-          <SettingsScreen autoPause={autoPause} onAutoPauseToggle={handleAutoPauseToggle} />
+          <SettingsScreen
+            autoPause={autoPause}
+            onAutoPauseToggle={handleAutoPauseToggle}
+            theme={theme}
+            setTheme={handleSetTheme}
+            accentMode={accentMode}
+            setAccentMode={handleSetAccentMode}
+            accentHue={accentHue}
+            setAccentHue={handleSetAccentHue}
+            effectiveTheme={effectiveTheme}
+          />
         )}
       </div>
     </div>
   )
 }
 
-/* ── No YouTube Tab empty state ── */
+/* ──────────────────────────────────────────────────────
+   NO TAB STATE
+────────────────────────────────────────────────────── */
 
 function NoTabState() {
   return (
     <div className="fade-in" style={{
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      minHeight: 'calc(100vh - 140px)',
-      gap: '20px', textAlign: 'center',
+      padding: '40px 20px 32px',
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
     }}>
       <div style={{
-        width: '56px', height: '56px',
-        background: 'var(--surface)',
-        border: '1px solid var(--border-mid)',
-        borderRadius: '16px',
+        width: 40, height: 40, borderRadius: 10,
+        background: 'var(--surface)', border: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: 18,
       }}>
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-          stroke="var(--muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="3" width="20" height="14" rx="2" />
-          <path d="M8 21h8M12 17v4" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="var(--text-2)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
         </svg>
       </div>
-
-      <div>
-        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', margin: '0 0 6px' }}>
-          No YouTube tab open
-        </p>
-        <p style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, maxWidth: '200px', margin: '0 auto' }}>
-          Switch to a YouTube tab to activate Nodex.
-        </p>
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 6 }}>
+        Open a video to begin
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 28, lineHeight: 1.55, maxWidth: 240 }}>
+        Nodex runs on YouTube tabs. Navigate to a video, then return here to start tracking.
       </div>
 
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)', width: '100%', overflow: 'hidden',
+        borderRadius: 12, overflow: 'hidden', width: '100%',
       }}>
         {[
           ['01', 'Open youtube.com in any tab'],
@@ -673,18 +858,15 @@ function NoTabState() {
           ['03', 'Nod your head to control playback'],
         ].map(([num, text], i, arr) => (
           <div key={num} style={{
-            display: 'flex', gap: '12px', alignItems: 'center',
+            display: 'flex', gap: 12, alignItems: 'center',
             padding: '11px 14px',
             borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
             <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
-              color: 'var(--accent)', fontWeight: 700, flexShrink: 0,
-              opacity: 0.7,
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              color: 'var(--accent)', fontWeight: 700, flexShrink: 0, opacity: 0.8,
             }}>{num}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-2)', lineHeight: 1.4, textAlign: 'left' }}>
-              {text}
-            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{text}</span>
           </div>
         ))}
       </div>
@@ -692,23 +874,21 @@ function NoTabState() {
   )
 }
 
-/* ── Main Screen ── */
+/* ──────────────────────────────────────────────────────
+   MAIN SCREEN
+────────────────────────────────────────────────────── */
 
 function MainScreen({
   running, browseMode, modeChanging, onModeToggle,
   metrics, lastCommand,
   blinkCalibNeeded, onDismissBlinkAlert, onGoCalibrate,
-  isFirstLaunch,
-  firstLaunchHintDismissed, onDismissFirstLaunchHint,
+  isFirstLaunch, firstLaunchHintDismissed, onDismissFirstLaunchHint,
   autoNavFiredRef,
 }) {
   const [isStarting, setIsStarting] = useState(false)
   const [startError, setStartError] = useState(/** @type {string|null} */ (null))
   const startTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
 
-  // modelReady: true once the first METRICS_UPDATE has arrived (landmark received),
-  // meaning MediaPipe WASM is loaded and the camera is delivering frames.
-  // Falls back to true after 5 s so a user not in frame doesn't see "Loading…" forever.
   const [modelReady, setModelReady] = useState(false)
   const modelReadyTimerRef = useRef(/** @type {ReturnType<typeof setTimeout>|null} */ (null))
 
@@ -721,16 +901,9 @@ function MainScreen({
       modelReadyTimerRef.current = null
       setModelReady(false)
     }
-    return () => {
-      clearTimeout(modelReadyTimerRef.current)
-      modelReadyTimerRef.current = null
-    }
+    return () => { clearTimeout(modelReadyTimerRef.current); modelReadyTimerRef.current = null }
   }, [running])
 
-  // First landmark received → model is definitely loaded.
-  // modelReady deliberately excluded from deps: we only need to react to metrics
-  // or running changing. Including modelReady would cause a redundant re-run
-  // after setModelReady(true) fires, with no effect (condition is then false).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (metrics != null && running && !modelReady) {
@@ -740,14 +913,10 @@ function MainScreen({
     }
   }, [metrics, running])
 
-  // Load sensitivity thresholds and personal EAR calibration so MetricBar
-  // shows the correct trigger lines. Falls back to DEFAULT_THRESHOLDS / default
-  // earClose if nothing is saved yet.
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS)
   const [calibratedEar, setCalibratedEar] = useState(/** @type {number|null} */ (null))
-  // true  → calibration record exists (may be expired/mismatched — "re-calibrate" case)
-  // false → never calibrated — blink gesture effectively disabled until auto-EMA warms up
   const [hasAnyEarCalibration, setHasAnyEarCalibration] = useState(true)
+
   useEffect(() => {
     Promise.all([
       loadSettings({ thresholds: DEFAULT_THRESHOLDS }),
@@ -779,50 +948,33 @@ function MainScreen({
     if (startTimerRef.current) { clearTimeout(startTimerRef.current); startTimerRef.current = null }
   }, [])
 
-  // Camera came up → clear pending error / spinner
   useEffect(() => {
     if (running) { clearStartTimer(); setIsStarting(false); setStartError(null) }
   }, [running, clearStartTimer])
 
-  // Cleanup on unmount
   useEffect(() => () => clearStartTimer(), [clearStartTimer])
 
   const handleToggle = () => {
     if (running) {
-      clearStartTimer()
-      setIsStarting(false)
-      setStartError(null)
+      clearStartTimer(); setIsStarting(false); setStartError(null)
       sendToContent({ type: MSG.STOP_ENGINE })
     } else {
-      setStartError(null)
-      setIsStarting(true)
+      setStartError(null); setIsStarting(true)
       sendToContent({ type: MSG.START_ENGINE })
-      // 9 s timeout — if engine hasn't reported running by then, surface an actionable error
       startTimerRef.current = setTimeout(() => {
         setIsStarting(false)
-        setStartError(
-          'Camera did not start. Make sure a webcam is connected and that Chrome has camera permission for this site.',
-        )
+        setStartError('Camera did not start. Make sure a webcam is connected and that Chrome has camera permission for this site.')
         startTimerRef.current = null
       }, 9000)
     }
   }
 
-  // Auto-navigate to the Calibration screen ~800 ms after the engine starts
-  // on the very first launch when no blink calibration exists.
-  // Cancelled if the user dismisses the blink alert or the pre-start hint.
-  // autoNavFiredRef and firstLaunchHintDismissed are lifted to App so they
-  // survive MainScreen unmount/remount caused by tab navigation.
   const onGoCalibrateRef = useRef(onGoCalibrate)
   onGoCalibrateRef.current = onGoCalibrate
   useEffect(() => {
     if (
-      running &&
-      isFirstLaunch &&
-      blinkCalibNeeded &&
-      !hasAnyEarCalibration &&
-      !firstLaunchHintDismissed &&
-      !autoNavFiredRef.current
+      running && isFirstLaunch && blinkCalibNeeded &&
+      !hasAnyEarCalibration && !firstLaunchHintDismissed && !autoNavFiredRef.current
     ) {
       autoNavFiredRef.current = true
       const t = setTimeout(() => onGoCalibrateRef.current(), 800)
@@ -831,184 +983,159 @@ function MainScreen({
   }, [running, isFirstLaunch, blinkCalibNeeded, hasAnyEarCalibration, firstLaunchHintDismissed])
 
   const cmdLabels = browseMode ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
+  const isLoading = isStarting || (running && !modelReady)
 
   return (
-    <>
+    <div style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
       {/* ── Blink calibration alert ── */}
       {blinkCalibNeeded && (
         hasAnyEarCalibration ? (
           <div className="fade-in" style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border-mid)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px 14px',
-            display: 'flex', alignItems: 'flex-start', gap: '10px',
+            background: 'var(--surface)', border: '1px solid var(--border-mid)',
+            borderRadius: 12, padding: '12px 14px',
+            display: 'flex', alignItems: 'flex-start', gap: 10,
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
-              style={{ flexShrink: 0, marginTop: '2px' }}>
+              style={{ flexShrink: 0, marginTop: 2 }}>
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
               <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
             </svg>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '3px' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
                 Blink calibration expired
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '8px' }}>
+              <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 8 }}>
                 Recalibrate for accurate eye-close detection.
               </div>
               <button onClick={onGoCalibrate} style={{
-                fontFamily: 'var(--font-ui)', fontSize: '11px', fontWeight: 600,
+                fontSize: 11.5, fontWeight: 600,
                 background: 'var(--surface-3)', color: 'var(--text)',
-                border: '1px solid var(--border-mid)', borderRadius: '6px',
-                padding: '5px 12px', cursor: 'pointer',
-              }}>
-                Recalibrate →
-              </button>
+                border: '1px solid var(--border-mid)', borderRadius: 6,
+                padding: '5px 12px',
+              }}>Recalibrate →</button>
             </div>
             <button onClick={onDismissBlinkAlert} aria-label="Dismiss" style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--muted)', fontSize: '18px', lineHeight: 1,
-              padding: '0', flexShrink: 0,
+              color: 'var(--text-3)', fontSize: 18, lineHeight: 1, flexShrink: 0,
             }}>×</button>
           </div>
         ) : (
           <div className="fade-in" style={{
-            background: 'rgba(91,255,216,0.05)',
-            border: '1px solid rgba(91,255,216,0.2)',
-            borderRadius: 'var(--radius-md)', padding: '14px 16px',
+            background: 'var(--accent-dim)',
+            border: '1px solid rgba(var(--accent-rgb),0.2)',
+            borderRadius: 12, padding: '14px 16px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                 stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
                 <circle cx="12" cy="12" r="3"/>
               </svg>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
                 Eye blink not configured
               </span>
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, marginBottom: '12px' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 12 }}>
               30-second calibration makes blink detection reliable for your eyes.
             </div>
             <button onClick={onGoCalibrate} style={{
-              width: '100%', fontFamily: 'var(--font-ui)', fontSize: '12px', fontWeight: 600,
-              background: 'var(--accent)', color: '#060f0c',
-              border: 'none', borderRadius: 'var(--radius-sm)',
-              padding: '9px 0', cursor: 'pointer',
-            }}>
-              Set up eye blink — 30 sec
-            </button>
+              width: '100%', fontSize: 12.5, fontWeight: 600,
+              background: 'var(--accent)', color: 'var(--accent-ink)',
+              border: 'none', borderRadius: 8, padding: '9px 0',
+            }}>Set up eye blink — 30 sec</button>
             <button onClick={onDismissBlinkAlert} style={{
-              display: 'block', margin: '8px auto 0', background: 'none',
-              border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)',
-              fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.03em',
-            }}>
-              skip for now
-            </button>
+              display: 'block', margin: '8px auto 0',
+              fontFamily: 'var(--font-mono)', fontSize: 10.5,
+              color: 'var(--text-3)', letterSpacing: '0.03em',
+            }}>skip for now</button>
           </div>
         )
       )}
 
-      {/* ── Engine status card ── */}
-      <div style={S.card}>
-        {/* Status row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-          <span style={S.dot(running && modelReady, isStarting || (running && !modelReady))} />
-          <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text)', flex: 1 }}>
-            {running
-              ? (modelReady ? 'Engine running' : 'Loading model…')
-              : isStarting ? 'Starting…' : 'Engine stopped'}
-          </span>
-          {running && modelReady && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              color: browseMode ? 'var(--accent)' : 'var(--muted)',
-              background: browseMode ? 'rgba(91,255,216,0.08)' : 'transparent',
-              border: `1px solid ${browseMode ? 'rgba(91,255,216,0.2)' : 'transparent'}`,
-              borderRadius: '4px',
-              padding: browseMode ? '2px 7px' : '0',
-            }}>
-              {browseMode ? 'BROWSE' : 'PLAYER'}
-            </span>
-          )}
-        </div>
-
-        {/* Camera error */}
-        {startError && (
-          <div style={{
-            background: 'rgba(255,85,85,0.06)', border: '1px solid rgba(255,85,85,0.2)',
-            borderRadius: 'var(--radius-sm)', padding: '10px 12px', marginBottom: '10px',
-            display: 'flex', gap: '8px', alignItems: 'flex-start',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="var(--red)" strokeWidth="2" strokeLinecap="round"
-              style={{ flexShrink: 0, marginTop: '1px' }}>
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
-            </svg>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--red)', marginBottom: '3px' }}>
-                Camera error
-              </div>
-              <div style={{ fontSize: '11px', color: '#a05555', lineHeight: 1.5 }}>
-                {startError}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button
-            style={{
-              ...S.btn,
-              ...(running ? S.btnStop : S.btnPrimary),
-              opacity: (isStarting || (running && !modelReady)) ? 0.55 : 1,
-            }}
-            onClick={handleToggle}
-            disabled={isStarting}
-          >
-            {running ? (modelReady ? 'Stop' : 'Loading…') : isStarting ? 'Starting…' : 'Start'}
-          </button>
-
-          {running && (
-            <button
-              style={{
-                ...S.btn,
-                width: 'auto', flex: '0 0 auto', padding: '10px 14px',
-                background: browseMode ? 'rgba(91,255,216,0.08)' : 'var(--surface-2)',
-                color: browseMode ? 'var(--accent)' : 'var(--text-2)',
-                border: `1px solid ${browseMode ? 'rgba(91,255,216,0.2)' : 'var(--border)'}`,
-                opacity: modeChanging ? 0.45 : 1,
-                fontSize: '12px',
-              }}
-              onClick={onModeToggle}
-              disabled={modeChanging}
-            >
-              {browseMode ? 'Player' : 'Browse'}
-            </button>
-          )}
-        </div>
+      {/* ── Tracking chip + start/stop ── */}
+      <div>
+        <TrackingChip running={running && modelReady} browseMode={browseMode} isLoading={isLoading}/>
       </div>
 
-      {/* ── First-launch hint ── */}
-      {!running && !isStarting && !startError &&
-        isFirstLaunch && !hasAnyEarCalibration && !firstLaunchHintDismissed && !blinkCalibNeeded && (
-        <FirstLaunchHint
-          onCalibrate={onGoCalibrate}
-          onSkip={onDismissFirstLaunchHint}
-        />
+      {/* ── Face visualizer ── */}
+      <FaceViz metrics={metrics ?? { yaw: 0, pitch: 0, roll: 0 }} running={running && modelReady}/>
+
+      {/* ── Camera error ── */}
+      {startError && (
+        <div style={{
+          background: 'var(--red-dim)', border: '1px solid rgba(var(--red),0.2)',
+          borderRadius: 10, padding: '10px 13px',
+          display: 'flex', gap: 9, alignItems: 'flex-start',
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="var(--red)" strokeWidth="2" strokeLinecap="round"
+            style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
+          </svg>
+          <div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--red)', marginBottom: 3 }}>Camera error</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{startError}</div>
+          </div>
+        </div>
       )}
 
-      {/* ── Idle: default gestures ── */}
+      {/* ── Start / Stop buttons ── */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          onClick={handleToggle}
+          disabled={isStarting}
+          style={{
+            flex: 1, height: 40, borderRadius: 10,
+            background: running ? 'var(--surface-3)' : 'var(--accent)',
+            color: running ? 'var(--text-2)' : 'var(--accent-ink)',
+            border: running ? '1px solid var(--border-mid)' : 'none',
+            fontSize: 13.5, fontWeight: 600,
+            opacity: isLoading ? 0.55 : 1,
+            transition: 'all 150ms var(--ease-out)',
+          }}
+        >
+          {running ? (modelReady ? 'Stop' : 'Loading…') : isStarting ? 'Starting…' : 'Start'}
+        </button>
+
+        {running && (
+          <button
+            onClick={onModeToggle}
+            disabled={modeChanging}
+            style={{
+              height: 40, padding: '0 14px', borderRadius: 10,
+              background: browseMode ? 'var(--accent-dim)' : 'var(--surface-2)',
+              color: browseMode ? 'var(--accent)' : 'var(--text-2)',
+              border: '1px solid ' + (browseMode ? 'rgba(var(--accent-rgb),0.22)' : 'var(--border)'),
+              fontSize: 12.5, fontWeight: 500,
+              opacity: modeChanging ? 0.45 : 1,
+              transition: 'all 150ms var(--ease-out)',
+            }}
+          >
+            {browseMode ? 'Player' : 'Browse'}
+          </button>
+        )}
+      </div>
+
+      {/* ── First-launch hint (when no calibration yet) ── */}
+      {!running && !isStarting && !startError &&
+        isFirstLaunch && !hasAnyEarCalibration && !firstLaunchHintDismissed && !blinkCalibNeeded && (
+        <FirstLaunchHint onCalibrate={onGoCalibrate} onSkip={onDismissFirstLaunchHint}/>
+      )}
+
+      {/* ── Idle: default gesture reference ── */}
       {!running && !isStarting && !lastCommand && !startError && (
-        <div style={S.card}>
-          <div style={S.sectionLabel}>Default gestures</div>
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '9px 14px', borderBottom: '1px solid var(--border)',
+            fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
+            fontFamily: 'var(--font-mono)', letterSpacing: '0.07em', textTransform: 'uppercase',
+          }}>Default gestures</div>
           {[
             ['Head left / right', '← Rewind / Skip →'],
             ['Head up / down',    '↑↓ Volume'],
@@ -1017,11 +1144,11 @@ function MainScreen({
           ].map(([gesture, cmd], i, arr) => (
             <div key={gesture} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '8px 0',
+              padding: '9px 14px',
               borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
             }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-2)' }}>{gesture}</span>
-              <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</span>
+              <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{gesture}</span>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>{cmd}</span>
             </div>
           ))}
         </div>
@@ -1030,24 +1157,24 @@ function MainScreen({
       {/* ── Last command flash ── */}
       {lastCommand && (
         <div key={`${lastCommand.command}-${lastCommand.gesture}`} className="cmd-flash" style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border-mid)',
-          borderRadius: 'var(--radius-md)',
-          padding: '14px 16px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '13px 14px',
+          background: 'var(--surface)', border: '1px solid var(--border-mid)',
+          borderRadius: 12,
         }}>
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-mono)', marginBottom: '4px', letterSpacing: '0.04em' }}>
-              LAST GESTURE
-            </div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--accent)' }}>
+            <div style={{
+              fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4,
+            }}>Last gesture</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>
               {cmdLabels[lastCommand.command] ?? COMMAND_LABELS[lastCommand.command] ?? lastCommand.command}
             </div>
           </div>
           <span style={{
-            fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-mono)',
+            fontSize: 11, color: 'var(--text-3)', fontFamily: 'var(--font-mono)',
             background: 'var(--surface-2)', border: '1px solid var(--border)',
-            borderRadius: '4px', padding: '3px 7px', letterSpacing: '0.03em',
+            borderRadius: 5, padding: '3px 8px', letterSpacing: '0.03em',
           }}>
             {GESTURE_LABELS[lastCommand.gesture] ?? lastCommand.gesture}
           </span>
@@ -1056,89 +1183,68 @@ function MainScreen({
 
       {/* ── Live metrics ── */}
       {metrics && (
-        <div style={S.card}>
-          <div style={S.sectionLabel}>Live metrics</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '8px' }}>
-            <MetricBar label="Yaw"   value={metrics.yaw}   max={60} threshold={thresholds.yaw}   type="centered" unit="°" />
-            <MetricBar label="Pitch" value={metrics.pitch} max={45} threshold={thresholds.pitch} type="centered" unit="°" />
-            <MetricBar label="Roll"  value={metrics.roll}  max={45} threshold={thresholds.roll}  type="centered" unit="°" />
-          </div>
-          <div style={S.divider} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-            <MetricBar label="EAR"   value={metrics.ear}   max={0.40} threshold={calibratedEar ?? thresholds.earClose} type="fill" triggerBelow />
-            <MetricBar label="Mouth" value={metrics.mouth} max={1.0}  threshold={thresholds.mouthOpen} type="fill" />
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <MetricRow label="Yaw"   value={metrics.yaw}   max={60}   threshold={thresholds.yaw}                         type="centered" unit="°"/>
+          <MetricRow label="Pitch" value={metrics.pitch} max={45}   threshold={thresholds.pitch}                       type="centered" unit="°"/>
+          <MetricRow label="Roll"  value={metrics.roll}  max={45}   threshold={thresholds.roll}                        type="centered" unit="°"/>
+          <MetricRow label="EAR"   value={metrics.ear}   max={0.40} threshold={calibratedEar ?? thresholds.earClose}  type="fill"     unit=""  triggerBelow/>
+          <MetricRow label="Mouth" value={metrics.mouth} max={1.0}  threshold={thresholds.mouthOpen}                  type="fill"     unit=""/>
         </div>
       )}
-    </>
+    </div>
   )
 }
 
-/* ── First-launch calibration hint ── */
+/* ──────────────────────────────────────────────────────
+   FIRST-LAUNCH HINT
+────────────────────────────────────────────────────── */
 
-/**
- * Shown in MainScreen idle state when:
- *   - Engine is stopped
- *   - User has never calibrated blink detection
- *   - This is their first (or second) engine start total
- *
- * Prominently asks the user to calibrate before starting, with a skip option.
- * Clicking "Start without calibrating" dismisses the hint for this session AND
- * prevents the auto-navigate that would otherwise fire after the engine starts.
- */
 function FirstLaunchHint({ onCalibrate, onSkip }) {
   return (
     <div className="fade-in" style={{
-      background: 'rgba(91,255,216,0.04)',
-      border: '1px solid rgba(91,255,216,0.15)',
-      borderRadius: 'var(--radius-md)', padding: '14px 16px',
+      background: 'var(--accent-dim)',
+      border: '1px solid rgba(var(--accent-rgb),0.18)',
+      borderRadius: 12, padding: '14px 16px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 12S5 5 12 5s11 7 11 7-4 7-11 7S1 12 1 12z"/>
           <circle cx="12" cy="12" r="3"/>
         </svg>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)' }}>
           Set up blink detection first
         </span>
       </div>
-      <p style={{ fontSize: '12px', color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 12px' }}>
+      <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, margin: '0 0 12px' }}>
         30-second calibration makes eye-close detection reliable for your eyes.
       </p>
       <button onClick={onCalibrate} style={{
-        width: '100%', fontFamily: 'var(--font-ui)', fontSize: '12px', fontWeight: 600,
-        background: 'var(--accent)', color: '#060f0c',
-        border: 'none', borderRadius: 'var(--radius-sm)',
-        padding: '9px 0', cursor: 'pointer', marginBottom: '8px',
-      }}>
-        Calibrate now — 30 sec
-      </button>
+        width: '100%', fontSize: 12.5, fontWeight: 600,
+        background: 'var(--accent)', color: 'var(--accent-ink)',
+        border: 'none', borderRadius: 8, padding: '9px 0', marginBottom: 8,
+      }}>Calibrate now — 30 sec</button>
       <button onClick={onSkip} style={{
-        display: 'block', width: '100%', background: 'none', border: 'none',
-        cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '10px',
-        color: 'var(--muted)', letterSpacing: '0.03em', padding: '2px 0',
-      }}>
-        Skip for now
-      </button>
+        display: 'block', width: '100%',
+        fontFamily: 'var(--font-mono)', fontSize: 10.5,
+        color: 'var(--text-3)', letterSpacing: '0.03em', padding: '2px 0',
+        textAlign: 'center',
+      }}>Skip for now</button>
     </div>
   )
 }
 
-/* ── Calibration Screen ── */
+/* ──────────────────────────────────────────────────────
+   CALIBRATION SCREEN
+────────────────────────────────────────────────────── */
 
-/**
- * @param {{ running: boolean, sendToContent: typeof sendToContent }} props
- */
 function CalibrationScreen({ running, sendToContent }) {
   const [wizardMode, setWizardMode] = useState(/** @type {null | 'full' | 'neutral_only' | 'blink_only'} */ (null))
-  const [summary, setSummary] = useState(
-    /** @type {{ cal: { yaw?: number, pitch?: number } | null, ear: { threshold?: number } | null, at: number | null }} */ ({
-      cal: null,
-      ear: null,
-      at: null,
-    }),
-  )
+  const [summary, setSummary] = useState({
+    cal: null,
+    ear: null,
+    at: null,
+  })
 
   const refreshSummary = useCallback(() => {
     void Promise.all([
@@ -1175,24 +1281,18 @@ function CalibrationScreen({ running, sendToContent }) {
     summary.at != null
       ? new Date(summary.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
       : '—'
-
   const yawStr =
-    summary.cal != null && typeof summary.cal.yaw === 'number' && Number.isFinite(summary.cal.yaw)
-      ? `${summary.cal.yaw.toFixed(1)}°`
-      : '—'
+    summary.cal?.yaw != null && Number.isFinite(summary.cal.yaw)
+      ? `${summary.cal.yaw.toFixed(1)}°` : '—'
   const pitchStr =
-    summary.cal != null && typeof summary.cal.pitch === 'number' && Number.isFinite(summary.cal.pitch)
-      ? `${summary.cal.pitch.toFixed(1)}°`
-      : '—'
+    summary.cal?.pitch != null && Number.isFinite(summary.cal.pitch)
+      ? `${summary.cal.pitch.toFixed(1)}°` : '—'
   const thStr =
-    summary.ear != null &&
-    typeof summary.ear.threshold === 'number' &&
-    Number.isFinite(summary.ear.threshold)
-      ? summary.ear.threshold.toFixed(2)
-      : '—'
+    summary.ear?.threshold != null && Number.isFinite(summary.ear.threshold)
+      ? summary.ear.threshold.toFixed(2) : '—'
 
   return (
-    <>
+    <div style={{ padding: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {wizardMode && (
         <CalibrationWizard
           mode={wizardMode}
@@ -1202,72 +1302,107 @@ function CalibrationScreen({ running, sendToContent }) {
         />
       )}
 
-      {/* ── Calibration data ── */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Calibration data</div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '10px' }}>
+      {/* ── Calibration data card ── */}
+      <SectionCard title="Calibration data">
+        {/* Metric tiles */}
+        <div style={{ padding: '12px 14px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
           {[['YAW', yawStr], ['PITCH', pitchStr], ['EAR', thStr]].map(([label, val]) => (
-            <div key={label} style={S.metricTile}>
-              <span style={S.metricLabel}>{label}</span>
-              <span style={S.metricValue}>{val}</span>
+            <div key={label} style={{
+              background: 'var(--bg)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '8px 10px',
+            }}>
+              <div style={{
+                fontSize: 10, color: 'var(--text-3)',
+                fontFamily: 'var(--font-mono)', letterSpacing: '0.07em', marginBottom: 3,
+              }}>{label}</div>
+              <div style={{
+                fontSize: 12, fontWeight: 600, color: 'var(--accent)',
+                fontFamily: 'var(--font-mono)',
+              }}>{val}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px' }}>
+        {/* Timestamp */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '0 14px 12px',
+        }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-            stroke="var(--muted)" strokeWidth="2" strokeLinecap="round">
+            stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
           </svg>
-          <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--muted)', letterSpacing: '0.02em' }}>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>
             {dateStr}
           </span>
         </div>
 
+        {/* Warning when engine is stopped */}
         {!running && (
           <div style={{
-            display: 'flex', alignItems: 'flex-start', gap: '8px',
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+            margin: '0 14px 12px',
             background: 'var(--surface-2)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', padding: '9px 11px', marginBottom: '12px',
+            borderRadius: 8, padding: '9px 11px',
           }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
               stroke="var(--amber)" strokeWidth="2" strokeLinecap="round"
-              style={{ flexShrink: 0, marginTop: '1px' }}>
+              style={{ flexShrink: 0, marginTop: 1 }}>
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
               <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2.5"/>
             </svg>
-            <span style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
               Start the camera from Home — calibration needs a live face feed.
             </span>
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <button type="button"
-            style={{ ...S.btn, ...S.btnPrimary, opacity: running ? 1 : 0.35 }}
-            disabled={!running} onClick={() => setWizardMode('neutral_only')}>
-            Neutral pose
-          </button>
-          <button type="button"
-            style={{ ...S.btn, ...S.btnStop, opacity: running ? 1 : 0.35 }}
-            disabled={!running} onClick={() => setWizardMode('blink_only')}>
-            Blink detection
-          </button>
-          <button type="button"
-            style={{ ...S.btn, ...S.btnSecondary, opacity: running ? 1 : 0.35 }}
-            disabled={!running} onClick={() => setWizardMode('full')}>
-            Full recalibration
-          </button>
+        {/* Calibration buttons */}
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            style={{
+              width: '100%', height: 38, borderRadius: 9,
+              background: 'var(--accent)', color: 'var(--accent-ink)',
+              fontSize: 13, fontWeight: 600,
+              opacity: running ? 1 : 0.35,
+              transition: 'opacity 150ms',
+            }}
+            disabled={!running} onClick={() => setWizardMode('neutral_only')}
+          >Neutral pose</button>
+          <button
+            style={{
+              width: '100%', height: 38, borderRadius: 9,
+              background: 'var(--surface-3)', color: 'var(--text-2)',
+              border: '1px solid var(--border-mid)', fontSize: 13, fontWeight: 500,
+              opacity: running ? 1 : 0.35,
+              transition: 'opacity 150ms',
+            }}
+            disabled={!running} onClick={() => setWizardMode('blink_only')}
+          >Blink detection</button>
+          <button
+            style={{
+              width: '100%', height: 38, borderRadius: 9,
+              background: 'transparent', color: 'var(--text-3)',
+              border: '1px solid var(--border)', fontSize: 13, fontWeight: 500,
+              opacity: running ? 1 : 0.35,
+              transition: 'opacity 150ms',
+            }}
+            disabled={!running} onClick={() => setWizardMode('full')}
+          >Full recalibration</button>
         </div>
-      </div>
-    </>
+      </SectionCard>
+    </div>
   )
 }
 
-/* ── Settings Screen ── */
+/* ──────────────────────────────────────────────────────
+   SETTINGS SCREEN
+────────────────────────────────────────────────────── */
 
-function SettingsScreen({ autoPause, onAutoPauseToggle }) {
+function SettingsScreen({
+  autoPause, onAutoPauseToggle,
+  theme, setTheme, accentMode, setAccentMode, accentHue, setAccentHue, effectiveTheme,
+}) {
   const [editingMode, setEditingMode] = useState('player')
   const [playerMap, setPlayerMap] = useState({ ...PLAYER_GESTURE_MAP })
   const [browseMap, setBrowseMap] = useState({ ...BROWSE_GESTURE_MAP })
@@ -1281,20 +1416,15 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
     ;(async () => {
       const pm = await loadPlayerGestureMap(PLAYER_GESTURE_MAP)
       const bm = await loadBrowseGestureMap(BROWSE_GESTURE_MAP)
-      setPlayerMap(pm)
-      setBrowseMap(bm)
+      setPlayerMap(pm); setBrowseMap(bm)
       const settings = await loadSettings({ thresholds: DEFAULT_THRESHOLDS })
       const th = { ...DEFAULT_THRESHOLDS, ...(settings.thresholds ?? {}) }
       for (const [key, val] of Object.entries(SENSITIVITY_PRESETS)) {
         if (
-          val.yaw === th.yaw &&
-          val.pitch === th.pitch &&
+          val.yaw === th.yaw && val.pitch === th.pitch &&
           (val.hysteresisYaw ?? 7) === (th.hysteresisYaw ?? 7) &&
           (val.hysteresisPitch ?? 7) === (th.hysteresisPitch ?? 7)
-        ) {
-          setPreset(key)
-          break
-        }
+        ) { setPreset(key); break }
       }
       const { nodex_refine_landmarks } = await chrome.storage.local.get('nodex_refine_landmarks')
       setRefineLandmarks(nodex_refine_landmarks === true)
@@ -1305,12 +1435,7 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
   const setCurrentMap = editingMode === 'player' ? setPlayerMap : setBrowseMap
 
   const handleGestureChange = (gesture, command) => {
-    setCurrentMap((prev) => ({ ...prev, [gesture]: command }))
-    setSaved(false)
-  }
-
-  const handlePresetChange = (e) => {
-    setPreset(e.target.value)
+    setCurrentMap(prev => ({ ...prev, [gesture]: command }))
     setSaved(false)
   }
 
@@ -1321,17 +1446,12 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
     await saveSettings({ thresholds })
     await sendToContent({
       type: MSG.UPDATE_SETTINGS,
-      settings: {
-        thresholds,
-        playerGestureMap: playerMap,
-        browseGestureMap: browseMap,
-      },
+      settings: { thresholds, playerGestureMap: playerMap, browseGestureMap: browseMap },
     })
     setSaved(true)
   }
 
-  const handleRefineLandmarksToggle = async (e) => {
-    const value = e.target.checked
+  const handleRefineLandmarksToggle = async (value) => {
     setRefineLandmarks(value)
     await chrome.storage.local.set({ nodex_refine_landmarks: value }).catch(() => {})
   }
@@ -1339,7 +1459,6 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
   const handleClearData = async () => {
     if (!clearConfirm) {
       setClearConfirm(true)
-      // Cancel any previous timer (rapid double-click guard).
       if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current)
       clearConfirmTimerRef.current = setTimeout(() => {
         clearConfirmTimerRef.current = null
@@ -1347,157 +1466,161 @@ function SettingsScreen({ autoPause, onAutoPauseToggle }) {
       }, 4000)
       return
     }
-    if (clearConfirmTimerRef.current) {
-      clearTimeout(clearConfirmTimerRef.current)
-      clearConfirmTimerRef.current = null
-    }
+    if (clearConfirmTimerRef.current) { clearTimeout(clearConfirmTimerRef.current); clearConfirmTimerRef.current = null }
     await chrome.storage.local.clear().catch(() => {})
-    // Reload the side panel so App resets to initial state (onboarding, etc.)
     window.location.reload()
   }
 
-  // Cancel the confirm timer if the user navigates away from Settings.
   useEffect(() => () => {
     if (clearConfirmTimerRef.current) clearTimeout(clearConfirmTimerRef.current)
   }, [])
 
-  const mappableGestures = Object.values(GESTURES).filter((g) => g !== GESTURES.NONE)
+  const mappableGestures = Object.values(GESTURES).filter(g => g !== GESTURES.NONE)
   const isBrowse = editingMode === 'browse'
   const commandOptions = isBrowse ? BROWSE_COMMANDS : Object.values(COMMANDS)
   const labels = isBrowse ? BROWSE_COMMAND_LABELS : COMMAND_LABELS
 
-  // Reusable toggle component
-  const Toggle = ({ checked, onChange }) => (
-    <div style={{ position: 'relative', flexShrink: 0, marginTop: '1px' }}>
-      <input type="checkbox" checked={checked} onChange={onChange}
-        style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-      <div style={{
-        width: '34px', height: '19px', borderRadius: '10px',
-        background: checked ? 'var(--accent)' : 'var(--surface-3)',
-        border: `1px solid ${checked ? 'rgba(91,255,216,0.3)' : 'var(--border-mid)'}`,
-        transition: 'background 0.2s, border-color 0.2s',
-        position: 'relative', cursor: 'pointer',
-      }}>
-        <div style={{
-          position: 'absolute', top: '2px',
-          left: checked ? '16px' : '2px',
-          width: '13px', height: '13px', borderRadius: '50%',
-          background: checked ? '#060f0c' : 'var(--muted)',
-          transition: 'left 0.2s, background 0.2s',
-        }} />
-      </div>
-    </div>
-  )
-
   return (
-    <>
-      {/* ── Gesture mapping ── */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Gesture mapping</div>
-        <div style={{ ...S.nav, marginBottom: '12px' }}>
-          <button style={{ ...S.navBtn, ...(editingMode === 'player' ? S.navBtnActive : {}) }}
-            onClick={() => setEditingMode('player')}>
-            Player
-          </button>
-          <button style={{ ...S.navBtn, ...(editingMode === 'browse' ? S.navBtnActive : {}) }}
-            onClick={() => setEditingMode('browse')}>
-            Browse
-          </button>
-        </div>
-        {mappableGestures.map((g) => (
-          <div key={g} style={S.gestureRow}>
-            <span style={S.gestureLabel}>{GESTURE_LABELS[g] ?? g}</span>
-            <div style={S.gestureSelect}>
-              <select style={S.select} value={currentMap[g] ?? COMMANDS.NONE}
-                onChange={(e) => handleGestureChange(g, e.target.value)}>
-                {commandOptions.map((c) => (
-                  <option key={c} value={c}>{labels[c] ?? COMMAND_LABELS[c] ?? c}</option>
-                ))}
-              </select>
+    <div style={{ padding: '18px 20px 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* ── Interface ── */}
+      <SectionCard title="Interface" desc="Appearance and accent color">
+        <SettingsRow title="Theme" desc="Light, dark, or follow system" first>
+          <div style={{ width: 178 }}>
+            <ThemePicker theme={theme} setTheme={setTheme}/>
+          </div>
+        </SettingsRow>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 500 }}>Accent</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 1 }}>
+              Focus ring, active states, and live indicators
             </div>
           </div>
-        ))}
-      </div>
+          <AccentPicker
+            mode={accentMode} hue={accentHue}
+            setMode={setAccentMode} setHue={setAccentHue}
+            effectiveTheme={effectiveTheme}
+          />
+        </div>
+      </SectionCard>
+
+      {/* ── Gesture mapping ── */}
+      <SectionCard title="Gesture Mapping" desc="Assign an action to each gesture">
+        {/* Player / Browse sub-tabs */}
+        <div style={{
+          display: 'flex', gap: 3, padding: 3,
+          margin: '10px 14px 0',
+          background: 'var(--surface-2)', borderRadius: 8,
+        }}>
+          {['player', 'browse'].map(m => (
+            <button key={m} onClick={() => setEditingMode(m)} style={{
+              flex: 1, padding: '6px 10px', borderRadius: 5,
+              background: editingMode === m ? 'var(--surface)' : 'transparent',
+              color: editingMode === m ? 'var(--text)' : 'var(--text-2)',
+              boxShadow: editingMode === m ? 'var(--shadow-soft)' : 'none',
+              fontSize: 12, fontWeight: 500,
+              textTransform: 'capitalize',
+              transition: 'all 160ms var(--ease-out)',
+            }}>{m}</button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 8 }} key={editingMode}>
+          {mappableGestures.map((g, i) => (
+            <BindingRow
+              key={g}
+              first={i === 0}
+              gesture={GESTURE_LABELS[g] ?? g}
+              value={currentMap[g] ?? COMMANDS.NONE}
+              options={commandOptions}
+              labels={labels}
+              onChange={cmd => handleGestureChange(g, cmd)}
+            />
+          ))}
+        </div>
+      </SectionCard>
 
       {/* ── Sensitivity ── */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Sensitivity</div>
-        <select style={S.select} value={preset} onChange={handlePresetChange}>
-          <option value="low">Low — large movements</option>
-          <option value="medium">Medium (default)</option>
-          <option value="high">High — small movements</option>
-        </select>
-      </div>
+      <SectionCard title="Sensitivity" desc="How easily gestures are triggered">
+        <SettingsRow title="Detection sensitivity" desc="Affects all gestures globally" first>
+          <select
+            value={preset}
+            onChange={e => { setPreset(e.target.value); setSaved(false) }}
+            style={{
+              fontSize: 12, fontFamily: 'var(--font-ui)',
+              background: 'var(--surface-2)', color: 'var(--text)',
+              border: '1px solid var(--border)', borderRadius: 6,
+              padding: '5px 8px', outline: 'none', width: 140,
+            }}
+          >
+            <option value="low">Low — large movements</option>
+            <option value="medium">Medium (default)</option>
+            <option value="high">High — small movements</option>
+          </select>
+        </SettingsRow>
+      </SectionCard>
 
       {/* ── Smart features ── */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Smart features</div>
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
-          <Toggle checked={autoPause} onChange={onAutoPauseToggle} />
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>
-              Auto-pause when you leave
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
-              Pauses after 2s with no face in frame.
-            </div>
-          </div>
-        </label>
-        <div style={S.divider} />
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
-          <Toggle checked={refineLandmarks} onChange={handleRefineLandmarksToggle} />
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>
-              High-precision landmarks
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
-              478-point mesh. Applies after reloading YouTube tab.
-            </div>
-          </div>
-        </label>
-      </div>
+      <SectionCard title="Smart Features" desc="Advanced behavior">
+        <SettingsRow
+          title="Auto-pause when you leave"
+          desc="Pauses video if no face detected for 2 seconds"
+          first
+        >
+          <Toggle on={autoPause} onChange={onAutoPauseToggle}/>
+        </SettingsRow>
+        <SettingsRow
+          title="High-precision landmarks"
+          desc="478-point mesh. Applies after reloading YouTube tab."
+        >
+          <Toggle on={refineLandmarks} onChange={handleRefineLandmarksToggle}/>
+        </SettingsRow>
+      </SectionCard>
 
       {/* ── Data ── */}
-      <div style={S.card}>
-        <div style={S.sectionLabel}>Data</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-            stroke="var(--muted)" strokeWidth="2" strokeLinecap="round">
-            <rect x="5" y="2" width="14" height="20" rx="2"/>
-            <path d="M12 18h.01"/>
+      <SectionCard title="Data" desc="Your information stays on this device">
+        <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round">
+            <rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>
           </svg>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+          <span style={{ fontSize: 11.5, color: 'var(--text-2)', flex: 1 }}>
             All data stored locally — nothing sent to any server.
           </span>
         </div>
-        <button
-          style={{
-            ...S.btn,
-            background: clearConfirm ? 'rgba(255,85,85,0.12)' : 'transparent',
-            color: 'var(--red)',
-            border: '1px solid rgba(255,85,85,0.25)',
-            transition: 'background 0.2s',
-            fontSize: '12px',
-          }}
-          onClick={handleClearData}
-        >
-          {clearConfirm ? '⚠ Tap again to confirm — cannot be undone' : 'Clear all Nodex data'}
-        </button>
-      </div>
+        <div style={{ padding: '0 14px 12px' }}>
+          <button
+            onClick={handleClearData}
+            style={{
+              width: '100%', height: 34, borderRadius: 8,
+              background: clearConfirm ? 'var(--red-dim)' : 'transparent',
+              color: 'var(--red)',
+              border: '1px solid ' + (clearConfirm ? 'rgba(208,72,72,0.3)' : 'rgba(208,72,72,0.22)'),
+              fontSize: 12, fontWeight: 500,
+              transition: 'all 160ms',
+            }}
+          >
+            {clearConfirm ? '⚠ Tap again to confirm — cannot be undone' : 'Clear all Nodex data'}
+          </button>
+        </div>
+      </SectionCard>
 
-      {/* ── Save ── */}
+      {/* ── Save button ── */}
       <button
-        style={{
-          ...S.btn,
-          background: saved ? 'transparent' : 'var(--accent)',
-          color: saved ? 'var(--accent)' : '#060f0c',
-          border: saved ? '1px solid rgba(91,255,216,0.25)' : 'none',
-          transition: 'all 0.2s',
-        }}
         onClick={handleSave}
+        style={{
+          width: '100%', height: 40, borderRadius: 10,
+          background: saved ? 'transparent' : 'var(--accent)',
+          color: saved ? 'var(--accent)' : 'var(--accent-ink)',
+          border: saved ? '1px solid rgba(var(--accent-rgb),0.3)' : 'none',
+          fontSize: 13.5, fontWeight: 600,
+          transition: 'all 200ms var(--ease-out)',
+          marginTop: 4,
+        }}
       >
         {saved ? '✓ Saved' : 'Save settings'}
       </button>
-    </>
+    </div>
   )
 }

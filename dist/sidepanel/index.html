@@ -4,48 +4,105 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nodex</title>
-  <!-- Zero external requests: all fonts are native system fonts.
-       --font-mono  → ui-monospace (SF Mono / Cascadia / Consolas)
-       --font-heading → system-ui  (-apple-system / Segoe UI / Ubuntu) -->
-
   <style>
+    /* ── Accent — mutable via Settings (default: minimal white-on-black in dark) */
     :root {
-      --bg:            #080808;
-      --surface:       #0f0f0f;
-      --surface-2:     #161616;
-      --surface-3:     #1e1e1e;
-      --border:        rgba(255,255,255,0.06);
-      --border-mid:    rgba(255,255,255,0.09);
-      --border-light:  rgba(255,255,255,0.13);
-      --text:          #f0f0f0;
-      --text-2:        #a0a0a0;
-      --muted:         #555;
-      --accent:        #5bffd8;
-      --accent-active: #5bffd8;
-      --accent-dim:    rgba(91,255,216,0.08);
-      --accent-glow:   rgba(91,255,216,0.18);
-      --red:           #ff5555;
-      --amber:         #f59e0b;
-      --green:         #4ade80;
-
-      --font-ui:      system-ui, -apple-system, BlinkMacSystemFont,
-                      'Segoe UI', 'Ubuntu', sans-serif;
-      --font-mono:    ui-monospace, 'SFMono-Regular', 'SF Mono',
-                      'Cascadia Mono', 'Consolas', 'Courier New', monospace;
-      --font-heading: system-ui, -apple-system, BlinkMacSystemFont,
-                      'Segoe UI', 'Ubuntu', sans-serif;
-
-      --radius-sm:  8px;
-      --radius-md:  12px;
-      --radius-lg:  16px;
+      --accent:     #f0f1f3;
+      --accent-rgb: 240, 241, 243;
+      --accent-ink: #060709;
     }
 
-    *, *::before, *::after {
-      margin: 0; padding: 0;
-      box-sizing: border-box;
+    /* ── Dark theme (default) */
+    :root, [data-theme="dark"] {
+      --bg:        #0a0b0d;
+      --bg-elev:   #0e1013;
+      --surface:   #121418;
+      --surface-2: #171a1e;
+      --surface-3: #1e2227;
+      --surface-4: #2a2f35;
+
+      --border:       rgba(255,255,255,0.055);
+      --border-mid:   rgba(255,255,255,0.085);
+      --border-light: rgba(255,255,255,0.13);
+
+      --text:   #eef0f3;
+      --text-2: #8b9098;
+      --text-3: #5d636a;
+      --muted:  #3f444a;
+
+      --red:       #ff5d5d;
+      --red-dim:   rgba(255,93,93,0.1);
+      --amber:     #e4a84a;
+      --amber-dim: rgba(228,168,74,0.1);
+      --green:     #4ade80;
+
+      --shadow-soft: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25);
+      --shadow-card: 0 4px 16px rgba(0,0,0,0.3), 0 24px 60px rgba(0,0,0,0.45);
     }
 
-    body {
+    /* ── Light theme */
+    [data-theme="light"] {
+      --accent:     #1a1d21;
+      --accent-rgb: 26, 29, 33;
+      --accent-ink: #ffffff;
+
+      --bg:        #fafaf8;
+      --bg-elev:   #f5f5f2;
+      --surface:   #ffffff;
+      --surface-2: #f7f7f4;
+      --surface-3: #efefec;
+      --surface-4: #e4e4e0;
+
+      --border:       rgba(0,0,0,0.065);
+      --border-mid:   rgba(0,0,0,0.1);
+      --border-light: rgba(0,0,0,0.15);
+
+      --text:   #1a1d21;
+      --text-2: #6a6f76;
+      --text-3: #989da4;
+      --muted:  #c2c6cc;
+
+      --red:       #d04848;
+      --red-dim:   rgba(208,72,72,0.08);
+      --amber:     #b87a1e;
+      --amber-dim: rgba(184,122,30,0.08);
+      --green:     #16a34a;
+
+      --shadow-soft: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.06);
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 12px 40px rgba(0,0,0,0.08);
+    }
+
+    /* ── Shared tokens */
+    :root {
+      --accent-dim:   rgba(var(--accent-rgb), 0.08);
+      --accent-dim-2: rgba(var(--accent-rgb), 0.14);
+      --accent-glow:  rgba(var(--accent-rgb), 0.2);
+
+      /* Radius */
+      --r-xs: 5px;
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 16px;
+
+      /* Legacy aliases used throughout */
+      --radius-sm: var(--r-sm);
+      --radius-md: var(--r-md);
+      --radius-lg: var(--r-lg);
+
+      /* Font stacks — zero external requests */
+      --font-ui:   system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Ubuntu', sans-serif;
+      --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Mono', 'Consolas', monospace;
+      --font-heading: var(--font-ui);
+
+      --ease-out:  cubic-bezier(0.2, 0.8, 0.2, 1);
+      --ease-soft: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+      --pad-xl: 20px;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-ui);
@@ -53,38 +110,50 @@
       line-height: 1.5;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      transition: background 280ms var(--ease-soft), color 280ms var(--ease-soft);
     }
 
     #root { min-height: 100vh; }
 
-    ::-webkit-scrollbar { width: 3px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    input, textarea, select { font-family: inherit; }
 
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.35); }
+
+    /* ── Animations */
     @keyframes pulse-dot {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); }
-      60%       { box-shadow: 0 0 0 6px rgba(74,222,128,0); }
-    }
-    @keyframes pulse-teal {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(91,255,216,0.5); }
-      60%       { box-shadow: 0 0 0 6px rgba(91,255,216,0); }
+      0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+      70%       { box-shadow: 0 0 0 5px rgba(255,255,255,0); }
     }
     @keyframes fade-in {
       from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes soft-in {
+      from { opacity: 0; transform: scale(0.97); }
+      to   { opacity: 1; transform: scale(1); }
     }
     @keyframes cmd-flash {
       0%   { opacity: 0; transform: scale(0.94); }
       15%  { opacity: 1; transform: scale(1.02); }
       100% { opacity: 1; transform: scale(1); }
     }
-    .fade-in { animation: fade-in 0.22s ease both; }
+    @keyframes pose-breathe {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.4); opacity: 0.85; }
+    }
+
+    .fade-in   { animation: fade-in   220ms var(--ease-out) both; }
+    .soft-in   { animation: soft-in   200ms var(--ease-out) both; }
     .cmd-flash { animation: cmd-flash 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
 
     button:active { opacity: 0.75 !important; }
-    select:focus  { outline: none; box-shadow: 0 0 0 2px rgba(91,255,216,0.25); }
+    select:focus  { outline: none; box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25); }
   </style>
-  <script type="module" crossorigin src="/assets/sidepanel-nxiwIcBA.js"></script>
+  <script type="module" crossorigin src="/assets/sidepanel-DwnzhS97.js"></script>
 </head>
 <body>
   <div id="root"></div>
